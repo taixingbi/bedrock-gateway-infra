@@ -189,6 +189,31 @@ resource "aws_iam_role_policy" "task_bedrock" {
   policy = data.aws_iam_policy_document.bedrock_invoke.json
 }
 
+# ECS Exec (`aws ecs execute-command`) needs the task to be able to open
+# an SSM Session Manager channel -- debugging/curl-testing convenience,
+# off by default (var.enable_execute_command).
+data "aws_iam_policy_document" "ecs_exec" {
+  count = var.enable_execute_command ? 1 : 0
+
+  statement {
+    sid = "EcsExec"
+    actions = [
+      "ssmmessages:CreateControlChannel",
+      "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel",
+      "ssmmessages:OpenDataChannel",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_ecs_exec" {
+  count  = var.enable_execute_command ? 1 : 0
+  name   = "${var.name_prefix}-ecs-exec"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.ecs_exec[0].json
+}
+
 # --- Task definition + service ------------------------------------------
 
 resource "aws_ecs_task_definition" "this" {
@@ -242,6 +267,8 @@ resource "aws_ecs_service" "this" {
     security_groups  = [aws_security_group.service.id]
     assign_public_ip = true
   }
+
+  enable_execute_command = var.enable_execute_command
 
   load_balancer {
     target_group_arn = aws_lb_target_group.this.arn

@@ -53,6 +53,12 @@ variable "desired_count" {
   default = 1
 }
 
+variable "enable_execute_command" {
+  description = "Allow `aws ecs execute-command` into running tasks -- debugging convenience, leave false in prod."
+  type        = bool
+  default     = false
+}
+
 variable "log_retention_days" {
   type    = number
   default = 30

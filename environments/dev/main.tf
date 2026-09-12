@@ -44,9 +44,10 @@ module "ecs_service" {
   # The service will show 0 running tasks until then; expected.
   image = "${module.ecr.repository_url}:bootstrap"
 
-  desired_count = var.desired_count
-  task_cpu      = var.task_cpu
-  task_memory   = var.task_memory
+  desired_count          = var.desired_count
+  task_cpu               = var.task_cpu
+  task_memory            = var.task_memory
+  enable_execute_command = true
 
   bedrock_model_ids = var.bedrock_model_ids
 
