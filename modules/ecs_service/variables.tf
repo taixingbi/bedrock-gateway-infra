@@ -21,6 +21,11 @@ variable "public_subnet_ids" {
   type = list(string)
 }
 
+variable "vpc_link_security_group_id" {
+  description = "Security group of the API Gateway VPC Link that's the ALB's only allowed ingress source (the ALB is private -- see modules/api_gateway)."
+  type        = string
+}
+
 variable "image" {
   description = "Full image URI (ECR repo URL + tag) to run. Placeholder on first apply -- CI overwrites it on every deploy via a new task definition revision."
   type        = string

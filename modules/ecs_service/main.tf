@@ -1,5 +1,8 @@
-# ECS Fargate service fronted by an ALB. HTTP only for now -- add an
-# ACM cert + HTTPS listener once there's a real domain (see infra/README.md).
+# ECS Fargate service fronted by a private ALB, reachable only through
+# API Gateway's VPC Link (see infra/modules/api_gateway) -- never
+# directly from the internet. HTTP only for now (TLS terminates at API
+# Gateway); add an ACM cert on the ALB listener too if that ever needs
+# to change.
 
 resource "aws_ecs_cluster" "this" {
   name = "${var.name_prefix}-cluster"
@@ -23,15 +26,15 @@ resource "aws_cloudwatch_log_group" "this" {
 
 resource "aws_security_group" "alb" {
   name        = "${var.name_prefix}-alb"
-  description = "ALB ingress from the internet on ${var.listener_port}"
+  description = "ALB ingress from the API Gateway VPC Link only, on ${var.listener_port}"
   vpc_id      = var.vpc_id
 
   ingress {
-    description = "HTTP from anywhere"
-    from_port   = var.listener_port
-    to_port     = var.listener_port
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = "From the API Gateway VPC Link"
+    from_port       = var.listener_port
+    to_port         = var.listener_port
+    protocol        = "tcp"
+    security_groups = [var.vpc_link_security_group_id]
   }
 
   egress {
@@ -75,7 +78,7 @@ resource "aws_security_group" "service" {
 
 resource "aws_lb" "this" {
   name               = "${var.name_prefix}-alb"
-  internal           = false
+  internal           = true
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
   subnets            = var.public_subnet_ids

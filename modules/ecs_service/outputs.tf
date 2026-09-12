@@ -2,6 +2,11 @@ output "alb_dns_name" {
   value = aws_lb.this.dns_name
 }
 
+output "alb_listener_arn" {
+  description = "For API Gateway's VPC Link private integration to target."
+  value       = aws_lb_listener.http.arn
+}
+
 output "cluster_name" {
   value = aws_ecs_cluster.this.name
 }
