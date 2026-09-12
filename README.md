@@ -1,51 +1,53 @@
-# infra/
+# bedrock-gateway-infra
 
-Terraform for the gateway's AWS deployment: ECS Fargate behind an ALB,
-one ECR repo per environment, and the GitHub OIDC role CI uses to push
-images and deploy -- no long-lived AWS keys in GitHub.
+Terraform for everything [bedrock-gateway-app](https://github.com/taixingbi/bedrock-gateway-app)
+runs on: VPC/networking, ALB + API Gateway VPC Link, ECS/Fargate, ECR,
+IAM/OIDC (for all three split repos, not just this one), and CloudWatch.
+Split out of the original combined repo (`bedrock-gateway-platform`,
+now archived) so an app deploy never needs Terraform permissions and a
+Terraform change never needs an app rebuild.
 
 ```
-infra/
-  modules/
-    network/       VPC, public subnets, IGW, route table
-    ecr/            ECR repo + lifecycle policy
-    ecs_service/    ECS cluster, ALB, task definition, service, IAM roles
-    github_oidc/    GitHub OIDC provider + one deploy role per environment
-  environments/
-    global/         Account-wide: the OIDC provider + deploy roles
-    dev/             gateway-dev cluster/service/ALB
-    prod/            gateway-prod cluster/service/ALB
+modules/
+  network/       VPC, public subnets, IGW, route table
+  ecr/            ECR repo + lifecycle policy
+  ecs_service/    ECS cluster, private ALB, task definition, service, IAM roles
+  api_gateway/    HTTP API + VPC Link, AWS_IAM and JWT routes to the same backend
+  github_oidc/    Generic: OIDC provider + N IAM roles trusting N {repo, GitHub Environment} pairs
+environments/
+  global/         Account-wide: the OIDC provider + every role for all three repos
+  dev/             gateway-dev cluster/service/ALB/API Gateway
+  prod/            gateway-prod cluster/service/ALB/API Gateway
 ```
 
-## Branch model
+## Why this repo owns IAM/OIDC for all three split repos
 
-`.github/workflows/ci.yml` maps branches to environments:
+`modules/github_oidc` is generic -- it knows how to create an OIDC
+role trusting a given `{repo, GitHub Environment}` pair, and nothing
+about what that role is allowed to do. `environments/global` calls it
+three times: once for bedrock-gateway-app's deploy roles, once for
+this repo's own plan/apply roles, once for bedrock-gateway-policies's
+publish role. Centralizing this here (rather than each repo owning its
+own OIDC role) means every permission grant in the whole platform is
+reviewable in one Terraform diff, not scattered across three repos'
+history.
 
-| Branch        | CI                    | Deploys to |
-|----------------|------------------------|------------|
-| `feature/*`    | tests + Docker build   | nothing    |
-| `dev`          | tests + Docker build   | `dev`      |
-| `main`         | tests + Docker build   | `prod`     |
-
-Feature branches (and PRs into `dev`/`main`) only run tests -- merging
-to `dev` auto-deploys to the `dev` environment, merging to `main`
-auto-deploys to `prod` (behind the `prod` GitHub Environment's required
-reviewers, see step 3 below).
-
-**What this deliberately does not include:** HTTPS (no domain/ACM cert
-yet -- the ALB is HTTP-only), a real IdP (the app still falls back to
-its dev JWT keypair -- see `OIDC_JWKS_URL` in `.env.example` -- until
-one is wired up), and private subnets/NAT (tasks run in public subnets
-with a security group that only allows inbound from the ALB, to avoid
-NAT gateway cost on a V1 MVP). Tighten these before this carries real
-traffic.
+**What this deliberately does not include:** HTTPS on the ALB (TLS
+terminates at API Gateway instead), a real IdP for the JWT path (the
+app still falls back to its dev JWT keypair until one is wired up), and
+private subnets/NAT (tasks run in public subnets with a security group
+that only allows inbound from the ALB, itself only reachable from API
+Gateway's VPC Link -- avoids NAT gateway cost on a V1 MVP). Tighten
+before this carries real production traffic.
 
 ## One-time account setup
 
-**1. State backend (optional but recommended).** Each environment
-keeps local state by default, which is fine for a single operator but
-unsafe for a team (no locking, state lives on one laptop). To use S3 +
-DynamoDB instead:
+**1. State backend.** Unlike the original combined repo (which got
+away with local state since only one person ever ran `terraform
+apply`), this repo's CI needs shared, lockable state --
+`backend.tf.example` -> `backend.tf` (S3 bucket + DynamoDB lock table)
+in each of `environments/{global,dev,prod}/` is **required**, not
+optional, before wiring up this repo's CI:
 
 ```bash
 aws s3api create-bucket --bucket <your-tfstate-bucket> --region us-east-1
@@ -55,59 +57,59 @@ aws dynamodb create-table --table-name <your-tfstate-lock-table> \
   --billing-mode PAY_PER_REQUEST
 ```
 
-Then, in each of `environments/{global,dev,prod}/`, copy
-`backend.tf.example` to `backend.tf`, fill in the bucket/table, and run
-`terraform init -migrate-state`.
+Then `terraform init -migrate-state` in each environment.
 
 **2. Apply `environments/global`.** Creates the GitHub OIDC provider
-(an account-wide singleton) and one IAM role per environment
-(`gha-deploy-dev`, `gha-deploy-prod`), each assumable only by a GitHub
-Actions job running under that GitHub Environment:
+(account-wide singleton) and every role across all three repos:
 
 ```bash
-cd infra/environments/global
+cd environments/global
 terraform init
 terraform apply -var="github_org=<your-github-org-or-username>"
 ```
 
-Note the two role ARNs in the output.
+Note the role ARNs in the output -- **this is the chicken-and-egg
+step**: this repo's own `gha-infra-plan`/`gha-infra-apply` roles don't
+exist until this first local apply creates them, so this repo's CI
+can't be the thing that creates them. Every apply after this first one
+can run through CI.
 
-**3. Create the GitHub Environments.** In the repo's Settings ->
-Environments, create `dev` and `prod`. Add each role ARN from step 2 as
-a repo/environment **variable** (not secret -- it's not sensitive) named
-`AWS_DEPLOY_ROLE_ARN_DEV` / `AWS_DEPLOY_ROLE_ARN_PROD`, matching what
-`.github/workflows/ci.yml`'s deploy jobs read via `vars.*`. While
-you're there, restrict each Environment's "Deployment branches" to its
-matching branch (`dev` for `dev`, `main` for `prod`) as a second
-layer behind the workflow's own branch check below. On `prod`,
-add required reviewers so a deploy pauses for approval -- there's no
-YAML-level equivalent of that gate.
+**3. Create the GitHub Environments.** Across all three repos:
+- bedrock-gateway-app: `dev`, `prod` -- set `AWS_APP_DEPLOY_ROLE_ARN_DEV`/`_PROD`.
+- bedrock-gateway-infra (this repo): `plan`, `apply` -- set
+  `AWS_INFRA_PLAN_ROLE_ARN`/`AWS_INFRA_APPLY_ROLE_ARN`. Add required
+  reviewers on `apply` (or split further into `apply-dev`/`apply-prod`
+  if you want dev to auto-apply but prod to always need a human).
+- bedrock-gateway-policies: `publish` -- set `AWS_POLICY_PUBLISH_ROLE_ARN`
+  (inert until the phase-2 DynamoDB-backed PolicyStore exists).
 
-**4. Apply `environments/dev` and `environments/prod`.** Creates the
-VPC, ECR repo, ECS cluster/service, and ALB for each:
+Restrict each Environment's deployment branches to `main` as a second
+layer behind each workflow's own branch check.
 
-```bash
-cd infra/environments/dev   # then prod
-terraform init
-terraform apply
-```
-
-The ECS service will show 0 running tasks after this -- the task
-definition points at an image tag (`:bootstrap`) that doesn't exist in
-ECR yet. That's expected; the next push to `main` runs CI's deploy job,
-which builds the real image, pushes it, and registers a task definition
-revision pointing at it (`terraform apply` afterwards leaves that
-revision alone -- see the `ignore_changes` on `aws_ecs_service` in
-`modules/ecs_service`).
+**4. Apply `environments/dev` and `environments/prod`.** Same as
+before the split -- creates/confirms the VPC, ECR repo, ECS
+cluster/service, ALB, and API Gateway for each. If migrating from the
+combined repo, this should show **zero changes** (same resource
+addresses, same state) -- that's the actual proof the split didn't
+touch any real infrastructure.
 
 ## Day to day
 
-- `terraform plan`/`apply` in `environments/dev` or `environments/prod`
-  for infra changes (instance sizing, env vars, etc.).
-- Application deploys happen through CI (`deploy-dev`/`deploy-prod`
-  jobs in `.github/workflows/ci.yml`), not `terraform apply` -- Terraform
-  owns the surrounding infrastructure, not the running image.
+- PRs get `terraform fmt -check` + `validate` + `plan` (read-only,
+  `gha-infra-plan`) automatically.
+- `apply` runs on merge to `main` (`gha-infra-apply`), gated by
+  whatever reviewers you configured on the `apply` GitHub Environment.
+- Application deploys happen through bedrock-gateway-app's own CI, not
+  through this repo -- this repo owns the surrounding infrastructure,
+  never the running image.
 - `bedrock_model_ids` in each environment's `variables.tf` grants the
-  task role `bedrock:InvokeModel`/`InvokeModelWithResponseStream` on
-  exactly those models/inference profiles. Keep it in sync with
-  `policies/route_sets.yaml`.
+  ECS task role `bedrock:InvokeModel`/`InvokeModelWithResponseStream`
+  on exactly those models/inference profiles. Keep it in sync with
+  whatever `route_sets.yaml` says in bedrock-gateway-policies.
+- The `gha-infra-apply` role's IAM/EC2/ELBv2/ECS/ECR/API-Gateway
+  permissions are intentionally broad-but-name-scoped rather than
+  minimal -- most of these services don't support resource-level IAM
+  scoping on creation actions (a VPC/ALB/etc. ARN doesn't exist until
+  after it's created). See the comment in
+  `environments/global/main.tf` above `data.aws_iam_policy_document.infra_apply`
+  before tightening it further.

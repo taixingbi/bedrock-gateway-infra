@@ -25,8 +25,15 @@ resource "aws_cloudwatch_log_group" "this" {
 # --- Security groups -------------------------------------------------
 
 resource "aws_security_group" "alb" {
-  name        = "${var.name_prefix}-alb"
-  description = "ALB ingress from the API Gateway VPC Link only, on ${var.listener_port}"
+  name = "${var.name_prefix}-alb"
+  # NOTE: description is immutable on an existing security group (AWS
+  # ForceNew) -- changing this string forces Terraform to replace the
+  # whole SG, which then fails with DependencyViolation as long as
+  # anything else (the ECS "service" SG's ingress rule, the ALB itself)
+  # still references its id. Left as the original text on purpose; the
+  # actual behavior change (VPC-Link-only ingress, below) doesn't need
+  # a description change to take effect.
+  description = "ALB ingress from the internet on ${var.listener_port}"
   vpc_id      = var.vpc_id
 
   ingress {

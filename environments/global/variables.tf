@@ -4,10 +4,6 @@ variable "aws_region" {
 }
 
 variable "github_org" {
-  type = string
-}
-
-variable "github_repo" {
-  type    = string
-  default = "bedrock-gateway-platform"
+  description = "GitHub organization/user that owns all three split repos, e.g. \"taixingbi\"."
+  type        = string
 }
