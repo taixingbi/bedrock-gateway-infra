@@ -85,7 +85,12 @@ data "aws_iam_policy_document" "app_deploy" {
 module "github_oidc_app" {
   source = "../../modules/github_oidc"
 
-  create_oidc_provider = true # the one account-wide OIDC provider is created here
+  # The account-wide OIDC provider already exists (created by the
+  # original bedrock-gateway-platform repo's environments/global apply,
+  # before the app/infra/policies split) -- every call here references
+  # it via data source rather than trying to create a second one for
+  # the same URL, which AWS rejects as a duplicate.
+  create_oidc_provider = false
   github_org           = var.github_org
   github_repo          = local.app_repo
 
@@ -205,7 +210,7 @@ data "aws_iam_policy_document" "infra_apply" {
 module "github_oidc_infra" {
   source = "../../modules/github_oidc"
 
-  create_oidc_provider = false # module.github_oidc_app already created it
+  create_oidc_provider = false # references the existing account-wide provider, same as above
   github_org           = var.github_org
   github_repo          = local.infra_repo
 
@@ -219,8 +224,6 @@ module "github_oidc_infra" {
       policy_json = data.aws_iam_policy_document.infra_apply.json
     }
   }
-
-  depends_on = [module.github_oidc_app]
 }
 
 # --- Policies repo: write-only to wherever policy delivery ends up.
