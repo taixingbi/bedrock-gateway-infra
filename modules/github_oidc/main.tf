@@ -48,10 +48,20 @@ data "aws_iam_policy_document" "assume" {
       values   = ["sts.amazonaws.com"]
     }
 
+    # StringLike (not StringEquals): GitHub's newer OIDC tokens append
+    # immutable owner/repo IDs to the sub claim --
+    # "repo:org@123/repo@456:environment:X" instead of the classic
+    # "repo:org/repo:environment:X" -- and which format a given repo
+    # gets isn't something this module controls. Match both forms, with
+    # the wildcard only after an explicit "@" so this can't accidentally
+    # match an unrelated org/repo sharing the same name prefix.
     condition {
-      test     = "StringEquals"
+      test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_org}/${var.github_repo}:environment:${each.key}"]
+      values = [
+        "repo:${var.github_org}/${var.github_repo}:environment:${each.key}",
+        "repo:${var.github_org}@*/${var.github_repo}@*:environment:${each.key}",
+      ]
     }
   }
 }
