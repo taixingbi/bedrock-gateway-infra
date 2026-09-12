@@ -80,7 +80,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_INFRA_APPLY_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_INFRA_APPLY_DEV_ROLE_ARN }}
           aws-region: us-east-1
 
       - uses: hashicorp/setup-terraform@v3
@@ -116,7 +116,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_INFRA_APPLY_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_INFRA_APPLY_PROD_ROLE_ARN }}
           aws-region: us-east-1
 
       - uses: hashicorp/setup-terraform@v3

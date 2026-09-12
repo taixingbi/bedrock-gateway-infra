@@ -219,8 +219,19 @@ module "github_oidc_infra" {
       role_name   = "gha-infra-plan"
       policy_json = data.aws_iam_policy_document.infra_plan.json
     }
-    apply = {
-      role_name   = "gha-infra-apply"
+    # Split dev/prod so the OIDC trust condition itself enforces the
+    # separation, not just the GitHub Environment's approval UI: a job
+    # whose sub claim says "environment:apply-dev" cannot assume
+    # gha-infra-apply-prod's role even if someone edited the workflow
+    # to skip the required-reviewer gate. Same policy document for both
+    # for now (TODO: scope prod's role tighter than dev's once there's
+    # something concrete to restrict it to).
+    apply-dev = {
+      role_name   = "gha-infra-apply-dev"
+      policy_json = data.aws_iam_policy_document.infra_apply.json
+    }
+    apply-prod = {
+      role_name   = "gha-infra-apply-prod"
       policy_json = data.aws_iam_policy_document.infra_apply.json
     }
   }
