@@ -24,11 +24,11 @@ infra/
 | Branch        | CI                    | Deploys to |
 |----------------|------------------------|------------|
 | `feature/*`    | tests + Docker build   | nothing    |
-| `develop`      | tests + Docker build   | `dev`      |
+| `dev`          | tests + Docker build   | `dev`      |
 | `main`         | tests + Docker build   | `prod`     |
 
-Feature branches (and PRs into `develop`/`main`) only run tests --
-merging to `develop` auto-deploys to `dev`, merging to `main`
+Feature branches (and PRs into `dev`/`main`) only run tests -- merging
+to `dev` auto-deploys to the `dev` environment, merging to `main`
 auto-deploys to `prod` (behind the `prod` GitHub Environment's required
 reviewers, see step 3 below).
 
@@ -78,7 +78,7 @@ a repo/environment **variable** (not secret -- it's not sensitive) named
 `AWS_DEPLOY_ROLE_ARN_DEV` / `AWS_DEPLOY_ROLE_ARN_PROD`, matching what
 `.github/workflows/ci.yml`'s deploy jobs read via `vars.*`. While
 you're there, restrict each Environment's "Deployment branches" to its
-matching branch (`develop` for `dev`, `main` for `prod`) as a second
+matching branch (`dev` for `dev`, `main` for `prod`) as a second
 layer behind the workflow's own branch check below. On `prod`,
 add required reviewers so a deploy pauses for approval -- there's no
 YAML-level equivalent of that gate.
