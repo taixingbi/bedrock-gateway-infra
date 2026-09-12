@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  fmt-validate:
+    name: fmt + validate (${{ matrix.environment }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [global, dev, prod]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive .
+
+      - name: terraform init (no backend, validate only)
+        working-directory: environments/${{ matrix.environment }}
+        run: terraform init -backend=false -input=false
+
+      - name: terraform validate
+        working-directory: environments/${{ matrix.environment }}
+        run: terraform validate
+
+  plan:
+    name: plan (${{ matrix.environment }})
+    needs: fmt-validate
+    runs-on: ubuntu-latest
+    environment: plan
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, prod]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_INFRA_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: terraform init
+        working-directory: environments/${{ matrix.environment }}
+        run: terraform init -input=false
+
+      - name: terraform plan
+        working-directory: environments/${{ matrix.environment }}
+        run: terraform plan -input=false -lock=false
+
+  apply:
+    name: apply (${{ matrix.environment }})
+    needs: fmt-validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # "apply" should have required reviewers configured on its GitHub
+    # Environment -- that approval, made before this job starts, is the
+    # actual human checkpoint. -auto-approve below is only there
+    # because terraform apply otherwise blocks on an interactive
+    # confirmation prompt that no CI runner can ever answer -- it does
+    # not skip or replace the Environment's own review gate.
+    environment: apply
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 1 # dev before prod, never both applying at once
+      matrix:
+        environment: [dev, prod]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_INFRA_APPLY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: terraform init
+        working-directory: environments/${{ matrix.environment }}
+        run: terraform init -input=false
+
+      - name: terraform apply
+        working-directory: environments/${{ matrix.environment }}
+        run: terraform apply -input=false -auto-approve
