@@ -42,8 +42,11 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      # prod's plan lives in promote-prod.yml instead, run against
+      # whatever commit_sha is being promoted -- not against whatever
+      # main happens to be at push time.
       matrix:
-        environment: [dev, prod]
+        environment: [dev]
     steps:
       - uses: actions/checkout@v4
 
@@ -93,40 +96,4 @@ jobs:
 
       - name: terraform apply
         working-directory: environments/dev
-        run: terraform apply -input=false -auto-approve
-
-  apply-prod:
-    name: apply (prod)
-    # Gated on dev succeeding first, but that ordering alone does not
-    # grant prod access -- "apply-prod" has its own required reviewers
-    # configured on its GitHub Environment, so this job always pauses
-    # for a separate manual approval regardless of how dev went.
-    # -auto-approve below only skips terraform's own interactive
-    # confirmation prompt (which no CI runner could ever answer); it
-    # does not skip or replace the Environment's review gate.
-    needs: apply-dev
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: apply-prod
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_INFRA_APPLY_PROD_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.9"
-
-      - name: terraform init
-        working-directory: environments/prod
-        run: terraform init -input=false
-
-      - name: terraform apply
-        working-directory: environments/prod
         run: terraform apply -input=false -auto-approve
