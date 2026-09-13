@@ -72,8 +72,9 @@ module "ecs_service" {
 
   bedrock_model_ids = var.bedrock_model_ids
 
-  jobs_queue_arn = aws_sqs_queue.jobs.arn
-  jobs_table_arn = aws_dynamodb_table.jobs.arn
+  jobs_queue_arn  = aws_sqs_queue.jobs.arn
+  jobs_table_arn  = aws_dynamodb_table.jobs.arn
+  usage_table_arn = aws_dynamodb_table.usage.arn
 
   container_env = {
     AWS_REGION            = var.aws_region
@@ -87,6 +88,7 @@ module "ecs_service" {
     IAM_TENANTS_PATH      = "policies/iam_tenants.yaml"
     JOBS_QUEUE_URL        = aws_sqs_queue.jobs.url
     JOBS_TABLE_NAME       = aws_dynamodb_table.jobs.name
+    USAGE_TABLE_NAME      = aws_dynamodb_table.usage.name
   }
 }
 
@@ -130,6 +132,28 @@ resource "aws_dynamodb_table" "jobs" {
   }
 }
 
+# --- M8: FinOps -----------------------------------------------------------
+
+resource "aws_dynamodb_table" "usage" {
+  name         = "${local.name_prefix}-usage"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "tenant_id"
+  range_key    = "month"
+
+  attribute {
+    name = "tenant_id"
+    type = "S"
+  }
+  attribute {
+    name = "month"
+    type = "S"
+  }
+
+  tags = {
+    Environment = "prod"
+  }
+}
+
 module "worker_service" {
   source = "../../modules/worker_service"
 
@@ -151,6 +175,7 @@ module "worker_service" {
   bedrock_model_ids  = var.bedrock_model_ids
   sqs_queue_arn      = aws_sqs_queue.jobs.arn
   dynamodb_table_arn = aws_dynamodb_table.jobs.arn
+  usage_table_arn    = aws_dynamodb_table.usage.arn
 
   container_env = {
     AWS_REGION            = var.aws_region
@@ -162,6 +187,7 @@ module "worker_service" {
     IAM_TENANTS_PATH      = "policies/iam_tenants.yaml"
     JOBS_QUEUE_URL        = aws_sqs_queue.jobs.url
     JOBS_TABLE_NAME       = aws_dynamodb_table.jobs.name
+    USAGE_TABLE_NAME      = aws_dynamodb_table.usage.name
   }
 }
 

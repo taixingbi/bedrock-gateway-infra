@@ -85,3 +85,12 @@ variable "dynamodb_table_arn" {
   description = "Job records table this worker reads/writes."
   type        = string
 }
+
+# M8 FinOps: the worker only writes (records spend after a job
+# succeeds) -- budget is checked once, at submission, by gateway-api;
+# re-checking it here would let a burst of already-queued jobs still
+# blow through a budget that was fine at each one's submission time,
+# which is a real gap but out of scope for the M7/M8 minimal-viable cut.
+variable "usage_table_arn" {
+  type = string
+}

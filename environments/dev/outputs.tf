@@ -36,3 +36,7 @@ output "jobs_table_name" {
 output "worker_service_name" {
   value = module.worker_service.service_name
 }
+
+output "usage_table_name" {
+  value = aws_dynamodb_table.usage.name
+}

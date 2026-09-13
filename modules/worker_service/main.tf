@@ -120,6 +120,12 @@ data "aws_iam_policy_document" "task" {
     actions   = ["dynamodb:GetItem", "dynamodb:PutItem"]
     resources = [var.dynamodb_table_arn]
   }
+
+  statement {
+    sid       = "UsageRecords"
+    actions   = ["dynamodb:UpdateItem"]
+    resources = [var.usage_table_arn]
+  }
 }
 
 resource "aws_iam_role_policy" "task" {

@@ -99,3 +99,12 @@ variable "jobs_queue_arn" {
 variable "jobs_table_arn" {
   type = string
 }
+
+# M8 FinOps: gateway-api both reads (budget check before calling the
+# model) and writes (record spend after a successful response) this
+# table -- see usage/store.py's UsageStore. UpdateItem, not PutItem:
+# add_and_get() always does an atomic ADD via UpdateItem, never a full
+# overwrite.
+variable "usage_table_arn" {
+  type = string
+}
