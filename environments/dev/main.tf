@@ -90,6 +90,14 @@ module "ecs_service" {
     JOBS_QUEUE_URL        = aws_sqs_queue.jobs.url
     JOBS_TABLE_NAME       = aws_dynamodb_table.jobs.name
     USAGE_TABLE_NAME      = aws_dynamodb_table.usage.name
+
+    # Human auth (Cognito, via the portal) -- separate from the
+    # AWS_IAM/SigV4 path service/application callers already use
+    # (auth/aws_iam.py), which needs nothing here. Falls back to the
+    # dev JWT keypair (config.py) if OIDC_JWKS_URL is ever unset.
+    OIDC_JWKS_URL = "${module.cognito_idp.user_pool_endpoint}/.well-known/jwks.json"
+    OIDC_ISSUER   = module.cognito_idp.user_pool_endpoint
+    OIDC_AUDIENCE = module.cognito_idp.client_id
   }
 }
 
@@ -231,5 +239,61 @@ module "portal_service" {
     # The portal's admin bearer-token auth goes over the open JWT
     # route -- not /iam/*, that one's for SigV4-signing machine callers.
     GATEWAY_API_URL = module.api_gateway.api_endpoint
+
+    COGNITO_DOMAIN        = module.cognito_idp.hosted_ui_domain
+    COGNITO_CLIENT_ID     = module.cognito_idp.client_id
+    COGNITO_CLIENT_SECRET = module.cognito_idp.client_secret
+    COGNITO_REGION        = var.aws_region
+    PORTAL_BASE_URL       = local.portal_base_url
   }
+}
+
+# --- Human identity (Cognito) for the portal ------------------------------
+#
+# local.portal_base_url is a plain string, not module.portal_service's
+# alb_dns_name output, deliberately: cognito_idp's callback_url needs
+# the portal's URL, and portal_service's container_env (above) needs
+# cognito_idp's client_id/secret -- referencing each other's *module*
+# outputs both ways is a genuine Terraform cycle. The ALB's DNS name
+# already exists and is stable (AWS assigns it once, at creation, and
+# it doesn't change on later applies) -- so this hardcodes today's
+# already-real value rather than re-deriving it circularly. Update this
+# if the portal's ALB is ever destroyed and recreated (a new one gets a
+# new DNS name).
+locals {
+  portal_base_url = "http://gateway-dev-portal-alb-1557235843.us-east-1.elb.amazonaws.com"
+}
+
+module "cognito_idp" {
+  source = "../../modules/cognito_idp"
+
+  name_prefix  = local.name_prefix
+  aws_region   = var.aws_region
+  callback_url = "${local.portal_base_url}/api/auth/callback"
+  logout_url   = "${local.portal_base_url}/login"
+}
+
+# The one admin user this session actually needs -- Cognito emails a
+# temporary password on creation (its built-in low-volume sender, no
+# SES setup required); Hosted UI forces a password change on first
+# login. Add more aws_cognito_user blocks (and matching
+# aws_cognito_user_in_group ones) for additional admins.
+resource "aws_cognito_user" "admin" {
+  user_pool_id = module.cognito_idp.user_pool_id
+  username     = "bitaihang@gmail.com"
+
+  attributes = {
+    email                   = "bitaihang@gmail.com"
+    email_verified          = "true"
+    "custom:tenant_id"      = "platform"
+    "custom:application_id" = "portal"
+  }
+
+  desired_delivery_mediums = ["EMAIL"]
+}
+
+resource "aws_cognito_user_in_group" "admin_is_platform_admin" {
+  user_pool_id = module.cognito_idp.user_pool_id
+  username     = aws_cognito_user.admin.username
+  group_name   = module.cognito_idp.platform_admin_group_name
 }
