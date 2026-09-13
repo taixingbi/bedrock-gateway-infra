@@ -286,10 +286,20 @@ locals {
 module "cognito_idp" {
   source = "../../modules/cognito_idp"
 
-  name_prefix  = local.name_prefix
-  aws_region   = var.aws_region
-  callback_url = "${local.portal_base_url}/api/auth/callback"
-  logout_url   = "${local.portal_base_url}/login"
+  name_prefix = local.name_prefix
+  aws_region  = var.aws_region
+
+  # TEMPORARY placeholders, not local.portal_base_url -- Cognito
+  # rejects any non-https callback/logout URL except http://localhost
+  # (confirmed live), and local.portal_base_url is still the plain-
+  # HTTP ALB URL until module.portal_cdn's real domain is known (see
+  # its comment above). Swap these for the real
+  # https://<distribution>.cloudfront.net URLs in the very next
+  # commit, once this apply creates the distribution and its domain
+  # is known. Until then the Hosted UI login flow doesn't work end to
+  # end, but every other resource here can still apply cleanly.
+  callback_url = "http://localhost/api/auth/callback"
+  logout_url   = "http://localhost/login"
 }
 
 # The one admin user this session actually needs -- Cognito emails a

@@ -38,8 +38,18 @@ data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {
 }
 
 resource "aws_security_group" "alb" {
-  name        = "${var.name_prefix}-alb"
-  description = "Portal ALB -- HTTP ingress from CloudFront only (MVP, no ACM cert on the ALB itself; see modules/portal_cdn)"
+  name = "${var.name_prefix}-alb"
+  # NOT updated to describe the new CloudFront-only ingress below --
+  # description is immutable on an EC2 security group (ForceNew), and
+  # this SG's fixed `name` collides with itself: AWS won't let a
+  # replacement SG be created under the same name while the ALB's
+  # ENIs still hold the original, so a plain description edit here
+  # forces a destroy-that-can't-complete (confirmed live -- the
+  # DeleteSecurityGroup call spent 15 minutes retrying
+  # DependencyViolation before the apply gave up). The ingress block
+  # below is NOT ForceNew and updates in place; only leave this string
+  # exactly as originally created.
+  description = "Portal ALB -- public HTTP ingress (MVP, no TLS yet)"
   vpc_id      = var.vpc_id
 
   ingress {

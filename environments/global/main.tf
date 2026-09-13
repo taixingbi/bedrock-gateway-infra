@@ -212,6 +212,10 @@ data "aws_iam_policy_document" "infra_plan" {
       "cognito-idp:Describe*", "cognito-idp:Get*", "cognito-idp:List*",
       "cognito-idp:AdminGetUser", "cognito-idp:AdminListGroupsForUser",
       "cloudfront:Get*", "cloudfront:List*",
+      # Not covered by ec2:Describe* -- a distinct action name for the
+      # same read, needed to plan module.portal_service's prefix-list
+      # ingress rule.
+      "ec2:GetManagedPrefixListEntries",
     ]
     resources = ["*"]
   }
