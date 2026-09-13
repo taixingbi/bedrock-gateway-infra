@@ -245,20 +245,16 @@ module "portal_service" {
     COGNITO_CLIENT_SECRET = module.cognito_idp.client_secret
     COGNITO_REGION        = var.aws_region
     PORTAL_BASE_URL       = local.portal_base_url
+    # Real HTTPS in front of the ALB now (module.portal_cdn) -- the
+    # only path a browser can reach this portal through is CloudFront,
+    # so the session cookie's Secure flag is safe to turn on.
+    PORTAL_HTTPS = "true"
   }
 }
 
 # HTTPS front door -- Cognito's Hosted UI requires it (see the
 # module's own comment). The ALB itself deliberately stays HTTP-only;
 # only CloudFront's edge gets a certificate.
-#
-# Deliberately not yet wired into local.portal_base_url or
-# module.cognito_idp's callback/logout URLs below: this distribution's
-# domain_name isn't known until it's actually created (unlike the
-# ALB's, which already existed before this Cognito work started --
-# see the comment on local.portal_base_url). Land this module first,
-# apply, then hardcode the real *.cloudfront.net domain the same way,
-# and flip PORTAL_HTTPS to "true".
 module "portal_cdn" {
   source = "../../modules/portal_cdn"
 
@@ -269,37 +265,28 @@ module "portal_cdn" {
 
 # --- Human identity (Cognito) for the portal ------------------------------
 #
-# local.portal_base_url is a plain string, not module.portal_service's
-# alb_dns_name output, deliberately: cognito_idp's callback_url needs
+# local.portal_base_url is a plain string, not module.portal_cdn's
+# domain_name output, deliberately: cognito_idp's callback_url needs
 # the portal's URL, and portal_service's container_env (above) needs
 # cognito_idp's client_id/secret -- referencing each other's *module*
-# outputs both ways is a genuine Terraform cycle. The ALB's DNS name
-# already exists and is stable (AWS assigns it once, at creation, and
-# it doesn't change on later applies) -- so this hardcodes today's
-# already-real value rather than re-deriving it circularly. Update this
-# if the portal's ALB is ever destroyed and recreated (a new one gets a
-# new DNS name).
+# outputs both ways is a genuine Terraform cycle. module.portal_cdn's
+# domain is now created and stable (CloudFront distribution domains
+# are assigned once, at creation, confirmed live as
+# d3ofy46m4rhywg.cloudfront.net) -- so this hardcodes today's
+# already-real value rather than re-deriving it circularly. Update
+# this if the portal's CloudFront distribution is ever destroyed and
+# recreated (a new one gets a new domain).
 locals {
-  portal_base_url = "http://gateway-dev-portal-alb-1557235843.us-east-1.elb.amazonaws.com"
+  portal_base_url = "https://d3ofy46m4rhywg.cloudfront.net"
 }
 
 module "cognito_idp" {
   source = "../../modules/cognito_idp"
 
-  name_prefix = local.name_prefix
-  aws_region  = var.aws_region
-
-  # TEMPORARY placeholders, not local.portal_base_url -- Cognito
-  # rejects any non-https callback/logout URL except http://localhost
-  # (confirmed live), and local.portal_base_url is still the plain-
-  # HTTP ALB URL until module.portal_cdn's real domain is known (see
-  # its comment above). Swap these for the real
-  # https://<distribution>.cloudfront.net URLs in the very next
-  # commit, once this apply creates the distribution and its domain
-  # is known. Until then the Hosted UI login flow doesn't work end to
-  # end, but every other resource here can still apply cleanly.
-  callback_url = "http://localhost/api/auth/callback"
-  logout_url   = "http://localhost/login"
+  name_prefix  = local.name_prefix
+  aws_region   = var.aws_region
+  callback_url = "${local.portal_base_url}/api/auth/callback"
+  logout_url   = "${local.portal_base_url}/login"
 }
 
 # The one admin user this session actually needs -- Cognito emails a
