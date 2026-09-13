@@ -86,16 +86,16 @@ variable "bedrock_profile_regions" {
   default     = ["us-east-1", "us-east-2", "us-west-2"]
 }
 
-# Both null by default -- most callers don't have an async jobs queue at
-# all. When set (M7), the task role additionally gets permission to
-# enqueue jobs and read/write their status; this is the gateway-api
-# side of the pair, worker_service's task role is the consumer side.
+# Required, not optional: every current caller already has a jobs
+# queue/table (M7), and an optional-with-count design here hits a real
+# Terraform limitation -- see main.tf's jobs_access comment. The task
+# role gets permission to enqueue jobs and read/write their status;
+# this is the gateway-api side of the pair, worker_service's task role
+# is the consumer side.
 variable "jobs_queue_arn" {
-  type    = string
-  default = null
+  type = string
 }
 
 variable "jobs_table_arn" {
-  type    = string
-  default = null
+  type = string
 }

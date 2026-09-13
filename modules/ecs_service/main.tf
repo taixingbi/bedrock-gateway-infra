@@ -225,11 +225,14 @@ resource "aws_iam_role_policy" "task_ecs_exec" {
 }
 
 # Enqueue side of M7's async jobs feature (see modules/worker_service
-# for the consumer side). Only granted when a queue/table is actually
-# wired up -- most environments won't have jobs_queue_arn set.
+# for the consumer side). Unconditional rather than count-gated on
+# nullability: a count that depends on a not-yet-created resource's ARN
+# (aws_sqs_queue.jobs.arn, on this module's very first apply alongside
+# that queue) is "known after apply", and Terraform refuses to plan a
+# count from a value it can't resolve yet ("Invalid count argument").
+# Every current caller of this module already has a jobs queue/table,
+# so there's no real optionality being given up here.
 data "aws_iam_policy_document" "jobs_access" {
-  count = var.jobs_queue_arn != null ? 1 : 0
-
   statement {
     sid       = "EnqueueJobs"
     actions   = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
@@ -244,10 +247,9 @@ data "aws_iam_policy_document" "jobs_access" {
 }
 
 resource "aws_iam_role_policy" "task_jobs" {
-  count  = var.jobs_queue_arn != null ? 1 : 0
   name   = "${var.name_prefix}-jobs-access"
   role   = aws_iam_role.task.id
-  policy = data.aws_iam_policy_document.jobs_access[0].json
+  policy = data.aws_iam_policy_document.jobs_access.json
 }
 
 # --- Task definition + service ------------------------------------------
