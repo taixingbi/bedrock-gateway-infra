@@ -49,6 +49,16 @@ resource "aws_cognito_user_pool" "this" {
   tags = {
     Environment = var.name_prefix
   }
+
+  # Cognito schema attributes are immutable after pool creation -- AWS
+  # silently fills in StringAttributeConstraints defaults we didn't
+  # specify, which the provider then sees as permanent drift on every
+  # refresh and tries to "update", something Cognito always rejects
+  # ("cannot modify or remove schema items"). There is no legitimate
+  # in-place schema change to make here; ignore it.
+  lifecycle {
+    ignore_changes = [schema]
+  }
 }
 
 # Cognito Hosted UI domains share one global namespace across every AWS
