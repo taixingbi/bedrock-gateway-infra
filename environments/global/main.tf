@@ -130,7 +130,12 @@ data "aws_iam_policy_document" "infra_plan" {
       "logs:Describe*", "logs:List*",
       "iam:Get*", "iam:List*",
       "sts:GetCallerIdentity",
-      "dynamodb:GetItem", "dynamodb:DescribeTable",
+      # Describe*, not just DescribeTable: refreshing an
+      # aws_dynamodb_table's full state also calls
+      # DescribeContinuousBackups (PITR), DescribeTimeToLive, etc --
+      # same "Describe*" wildcard already used for every other service
+      # in this statement, for the same reason.
+      "dynamodb:GetItem", "dynamodb:Describe*", "dynamodb:ListTagsOfResource",
       "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:ListQueues", "sqs:ListQueueTags",
       "s3:GetObject", "s3:ListBucket",
     ]
