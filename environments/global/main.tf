@@ -131,6 +131,7 @@ data "aws_iam_policy_document" "infra_plan" {
       "iam:Get*", "iam:List*",
       "sts:GetCallerIdentity",
       "dynamodb:GetItem", "dynamodb:DescribeTable",
+      "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:ListQueues", "sqs:ListQueueTags",
       "s3:GetObject", "s3:ListBucket",
     ]
     resources = ["*"]
@@ -166,6 +167,19 @@ data "aws_iam_policy_document" "infra_apply" {
   statement {
     sid       = "LogsBroad"
     actions   = ["logs:*"]
+    resources = ["*"]
+  }
+  # M7: SQS/DynamoDB resource ARNs (queue URL, table name) don't exist
+  # until creation, same reasoning as every other broad grant above --
+  # not scopable ahead of time.
+  statement {
+    sid       = "SqsBroad"
+    actions   = ["sqs:*"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "DynamoDbBroad"
+    actions   = ["dynamodb:*"]
     resources = ["*"]
   }
 
