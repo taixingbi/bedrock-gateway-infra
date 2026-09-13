@@ -72,6 +72,9 @@ module "ecs_service" {
 
   bedrock_model_ids = var.bedrock_model_ids
 
+  jobs_queue_arn = aws_sqs_queue.jobs.arn
+  jobs_table_arn = aws_dynamodb_table.jobs.arn
+
   container_env = {
     AWS_REGION            = var.aws_region
     BEDROCK_MODEL_ID      = var.bedrock_model_ids[0]
@@ -82,6 +85,83 @@ module "ecs_service" {
     ROUTE_SET_CONFIG_PATH = "policies/route_sets.yaml"
     TENANT_POLICY_PATH    = "policies/tenants.yaml"
     IAM_TENANTS_PATH      = "policies/iam_tenants.yaml"
+    JOBS_QUEUE_URL        = aws_sqs_queue.jobs.url
+    JOBS_TABLE_NAME       = aws_dynamodb_table.jobs.name
+  }
+}
+
+# --- M7: async jobs -----------------------------------------------------
+
+resource "aws_sqs_queue" "jobs_dlq" {
+  name                      = "${local.name_prefix}-jobs-dlq"
+  message_retention_seconds = 1209600 # 14 days
+
+  tags = {
+    Environment = "prod"
+  }
+}
+
+resource "aws_sqs_queue" "jobs" {
+  name                       = "${local.name_prefix}-jobs"
+  visibility_timeout_seconds = 60 # must exceed the worker's expected per-job processing time
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.jobs_dlq.arn
+    maxReceiveCount     = 3
+  })
+
+  tags = {
+    Environment = "prod"
+  }
+}
+
+resource "aws_dynamodb_table" "jobs" {
+  name         = "${local.name_prefix}-jobs"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "job_id"
+
+  attribute {
+    name = "job_id"
+    type = "S"
+  }
+
+  tags = {
+    Environment = "prod"
+  }
+}
+
+module "worker_service" {
+  source = "../../modules/worker_service"
+
+  name_prefix       = "${local.name_prefix}-worker"
+  environment       = "prod"
+  aws_region        = var.aws_region
+  vpc_id            = module.network.vpc_id
+  public_subnet_ids = module.network.public_subnet_ids
+  cluster_name      = module.ecs_service.cluster_name
+
+  # Same image as gateway-api -- same codebase, different command.
+  image   = "${module.ecr.repository_url}:bootstrap"
+  command = ["python", "-m", "services.worker.main"]
+
+  desired_count = 1
+  task_cpu      = var.task_cpu
+  task_memory   = var.task_memory
+
+  bedrock_model_ids  = var.bedrock_model_ids
+  sqs_queue_arn      = aws_sqs_queue.jobs.arn
+  dynamodb_table_arn = aws_dynamodb_table.jobs.arn
+
+  container_env = {
+    AWS_REGION            = var.aws_region
+    BEDROCK_MODEL_ID      = var.bedrock_model_ids[0]
+    SERVICE_NAME          = "${local.name_prefix}-worker"
+    LOG_LEVEL             = "INFO"
+    ROUTE_SET_CONFIG_PATH = "policies/route_sets.yaml"
+    TENANT_POLICY_PATH    = "policies/tenants.yaml"
+    IAM_TENANTS_PATH      = "policies/iam_tenants.yaml"
+    JOBS_QUEUE_URL        = aws_sqs_queue.jobs.url
+    JOBS_TABLE_NAME       = aws_dynamodb_table.jobs.name
   }
 }
 

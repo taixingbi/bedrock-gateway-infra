@@ -24,3 +24,15 @@ output "ecs_cluster_name" {
 output "ecs_service_name" {
   value = module.ecs_service.service_name
 }
+
+output "jobs_queue_url" {
+  value = aws_sqs_queue.jobs.url
+}
+
+output "jobs_table_name" {
+  value = aws_dynamodb_table.jobs.name
+}
+
+output "worker_service_name" {
+  value = module.worker_service.service_name
+}

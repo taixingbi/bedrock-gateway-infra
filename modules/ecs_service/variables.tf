@@ -85,3 +85,17 @@ variable "bedrock_profile_regions" {
   type        = list(string)
   default     = ["us-east-1", "us-east-2", "us-west-2"]
 }
+
+# Both null by default -- most callers don't have an async jobs queue at
+# all. When set (M7), the task role additionally gets permission to
+# enqueue jobs and read/write their status; this is the gateway-api
+# side of the pair, worker_service's task role is the consumer side.
+variable "jobs_queue_arn" {
+  type    = string
+  default = null
+}
+
+variable "jobs_table_arn" {
+  type    = string
+  default = null
+}

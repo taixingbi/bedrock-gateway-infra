@@ -224,6 +224,32 @@ resource "aws_iam_role_policy" "task_ecs_exec" {
   policy = data.aws_iam_policy_document.ecs_exec[0].json
 }
 
+# Enqueue side of M7's async jobs feature (see modules/worker_service
+# for the consumer side). Only granted when a queue/table is actually
+# wired up -- most environments won't have jobs_queue_arn set.
+data "aws_iam_policy_document" "jobs_access" {
+  count = var.jobs_queue_arn != null ? 1 : 0
+
+  statement {
+    sid       = "EnqueueJobs"
+    actions   = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
+    resources = [var.jobs_queue_arn]
+  }
+
+  statement {
+    sid       = "JobRecords"
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem"]
+    resources = [var.jobs_table_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "task_jobs" {
+  count  = var.jobs_queue_arn != null ? 1 : 0
+  name   = "${var.name_prefix}-jobs-access"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.jobs_access[0].json
+}
+
 # --- Task definition + service ------------------------------------------
 
 resource "aws_ecs_task_definition" "this" {
