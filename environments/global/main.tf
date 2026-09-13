@@ -205,6 +205,7 @@ data "aws_iam_policy_document" "infra_plan" {
       "dynamodb:GetItem", "dynamodb:Describe*", "dynamodb:ListTagsOfResource",
       "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:ListQueues", "sqs:ListQueueTags",
       "s3:GetObject", "s3:ListBucket",
+      "cognito-idp:Describe*", "cognito-idp:Get*", "cognito-idp:List*",
     ]
     resources = ["*"]
   }
@@ -252,6 +253,13 @@ data "aws_iam_policy_document" "infra_apply" {
   statement {
     sid       = "DynamoDbBroad"
     actions   = ["dynamodb:*"]
+    resources = ["*"]
+  }
+  # M10 Cognito task: User Pool/domain/client/group ids don't exist
+  # until creation either -- same reasoning as SqsBroad/DynamoDbBroad.
+  statement {
+    sid       = "CognitoBroad"
+    actions   = ["cognito-idp:*"]
     resources = ["*"]
   }
 
