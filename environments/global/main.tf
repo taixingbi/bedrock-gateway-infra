@@ -211,6 +211,7 @@ data "aws_iam_policy_document" "infra_plan" {
       # Get*/List* despite reading the same data.
       "cognito-idp:Describe*", "cognito-idp:Get*", "cognito-idp:List*",
       "cognito-idp:AdminGetUser", "cognito-idp:AdminListGroupsForUser",
+      "cloudfront:Get*", "cloudfront:List*",
     ]
     resources = ["*"]
   }
@@ -265,6 +266,14 @@ data "aws_iam_policy_document" "infra_apply" {
   statement {
     sid       = "CognitoBroad"
     actions   = ["cognito-idp:*"]
+    resources = ["*"]
+  }
+  # CloudFront distribution ids likewise don't exist until creation;
+  # ListCachePolicies/ListOriginRequestPolicies (looking up AWS's
+  # managed policies by name) need read access even during plan.
+  statement {
+    sid       = "CloudFrontBroad"
+    actions   = ["cloudfront:*"]
     resources = ["*"]
   }
 
