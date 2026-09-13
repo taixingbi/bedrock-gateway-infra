@@ -199,3 +199,28 @@ module "api_gateway" {
   vpc_link_subnet_ids        = module.network.public_subnet_ids
   vpc_link_security_group_id = aws_security_group.vpc_link.id
 }
+
+# --- M10: self-service portal ---------------------------------------------
+
+module "ecr_portal" {
+  source = "../../modules/ecr"
+
+  repository_name = "${local.name_prefix}-portal"
+  environment     = "prod"
+}
+
+module "portal_service" {
+  source = "../../modules/portal_service"
+
+  name_prefix       = "${local.name_prefix}-portal"
+  environment       = "prod"
+  aws_region        = var.aws_region
+  vpc_id            = module.network.vpc_id
+  public_subnet_ids = module.network.public_subnet_ids
+
+  image = "${module.ecr_portal.repository_url}:bootstrap"
+
+  container_env = {
+    GATEWAY_API_URL = module.api_gateway.api_endpoint
+  }
+}

@@ -28,6 +28,7 @@ locals {
   app_repo      = "bedrock-gateway-app"
   infra_repo    = "bedrock-gateway-infra"
   policies_repo = "bedrock-gateway-policies"
+  portal_repo   = "bedrock-gateway-portal"
 }
 
 # --- App repo: push to ECR, deploy to ECS. Same shape this account
@@ -102,6 +103,72 @@ module "github_oidc_app" {
     prod = {
       role_name   = "gha-app-deploy-prod"
       policy_json = data.aws_iam_policy_document.app_deploy["prod"].json
+    }
+  }
+}
+
+# --- Portal repo (M10): same shape as app_deploy above, minus
+# PassRole -- portal_service has no task IAM role at all (the portal
+# never calls an AWS API directly, only the gateway's own HTTP admin
+# API), so there's no task role ARN to pass. ---------------------------
+
+data "aws_iam_policy_document" "portal_deploy" {
+  for_each = { dev = "gateway-dev-portal", prod = "gateway-prod-portal" }
+
+  statement {
+    sid = "PushToEcr"
+    actions = [
+      "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage", "ecr:BatchCheckLayerAvailability",
+      "ecr:PutImage", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload",
+    ]
+    resources = ["arn:aws:ecr:${var.aws_region}:${local.account_id}:repository/${each.value}*"]
+  }
+
+  statement {
+    sid       = "EcrAuth"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "DeployToEcs"
+    actions   = ["ecs:DescribeServices", "ecs:UpdateService"]
+    resources = ["*"]
+    condition {
+      test     = "ArnLike"
+      variable = "ecs:cluster"
+      values   = ["arn:aws:ecs:${var.aws_region}:${local.account_id}:cluster/${each.value}*"]
+    }
+  }
+
+  statement {
+    sid       = "RegisterTaskDefinition"
+    actions   = ["ecs:RegisterTaskDefinition", "ecs:DescribeTaskDefinition"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "PassExecutionRole"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${local.account_id}:role/${each.value}*-execution"]
+  }
+}
+
+module "github_oidc_portal" {
+  source = "../../modules/github_oidc"
+
+  create_oidc_provider = false
+  github_org           = var.github_org
+  github_repo          = local.portal_repo
+
+  roles = {
+    dev = {
+      role_name   = "gha-portal-deploy-dev"
+      policy_json = data.aws_iam_policy_document.portal_deploy["dev"].json
+    }
+    prod = {
+      role_name   = "gha-portal-deploy-prod"
+      policy_json = data.aws_iam_policy_document.portal_deploy["prod"].json
     }
   }
 }
