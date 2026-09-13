@@ -248,6 +248,25 @@ module "portal_service" {
   }
 }
 
+# HTTPS front door -- Cognito's Hosted UI requires it (see the
+# module's own comment). The ALB itself deliberately stays HTTP-only;
+# only CloudFront's edge gets a certificate.
+#
+# Deliberately not yet wired into local.portal_base_url or
+# module.cognito_idp's callback/logout URLs below: this distribution's
+# domain_name isn't known until it's actually created (unlike the
+# ALB's, which already existed before this Cognito work started --
+# see the comment on local.portal_base_url). Land this module first,
+# apply, then hardcode the real *.cloudfront.net domain the same way,
+# and flip PORTAL_HTTPS to "true".
+module "portal_cdn" {
+  source = "../../modules/portal_cdn"
+
+  name_prefix        = "${local.name_prefix}-portal"
+  environment        = "dev"
+  origin_domain_name = module.portal_service.alb_dns_name
+}
+
 # --- Human identity (Cognito) for the portal ------------------------------
 #
 # local.portal_base_url is a plain string, not module.portal_service's

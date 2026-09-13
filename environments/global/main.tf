@@ -205,7 +205,12 @@ data "aws_iam_policy_document" "infra_plan" {
       "dynamodb:GetItem", "dynamodb:Describe*", "dynamodb:ListTagsOfResource",
       "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:ListQueues", "sqs:ListQueueTags",
       "s3:GetObject", "s3:ListBucket",
+      # Refreshing aws_cognito_user/aws_cognito_user_in_group state
+      # calls the Admin* variants (AdminGetUser,
+      # AdminListGroupsForUser), a separate action namespace from
+      # Get*/List* despite reading the same data.
       "cognito-idp:Describe*", "cognito-idp:Get*", "cognito-idp:List*",
+      "cognito-idp:AdminGetUser", "cognito-idp:AdminListGroupsForUser",
     ]
     resources = ["*"]
   }

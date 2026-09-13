@@ -29,17 +29,25 @@ resource "aws_cloudwatch_log_group" "this" {
   retention_in_days = var.log_retention_days
 }
 
+# AWS-managed, not ours -- the stable, AWS-published list of
+# CloudFront edge IP ranges (see modules/portal_cdn). Scoping ingress
+# to it means the plain-HTTP ALB is unreachable directly from the
+# internet; the only path in is through CloudFront's HTTPS front door.
+data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
 resource "aws_security_group" "alb" {
   name        = "${var.name_prefix}-alb"
-  description = "Portal ALB -- public HTTP ingress (MVP, no TLS yet)"
+  description = "Portal ALB -- HTTP ingress from CloudFront only (MVP, no ACM cert on the ALB itself; see modules/portal_cdn)"
   vpc_id      = var.vpc_id
 
   ingress {
-    description = "HTTP from anywhere"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = "HTTP from CloudFront edge locations only"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront_origin_facing.id]
   }
 
   egress {
