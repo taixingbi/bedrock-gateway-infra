@@ -112,8 +112,12 @@ data "aws_iam_policy_document" "task" {
   }
 
   statement {
+    # PutItem, not UpdateItem: jobs/store.py's DynamoDbJobStore.put()
+    # always does a full put_item overwrite (both the initial create by
+    # gateway-api and every status transition here), never an
+    # UpdateItem-style partial update.
     sid       = "JobRecords"
-    actions   = ["dynamodb:GetItem", "dynamodb:UpdateItem"]
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem"]
     resources = [var.dynamodb_table_arn]
   }
 }
