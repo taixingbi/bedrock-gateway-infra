@@ -90,6 +90,12 @@ resource "aws_cognito_user_pool_client" "portal" {
   # attribute-update permission.
   write_attributes = []
 
+  # Debugging-only escape hatch, not part of the real login flow (that's
+  # the Hosted UI/Authorization Code flow above): lets an operator with
+  # AWS credentials mint a real token via AdminInitiateAuth to inspect
+  # actual ID token claims directly, without a browser.
+  explicit_auth_flows = ["ALLOW_ADMIN_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+
   access_token_validity  = 1
   id_token_validity      = 1
   refresh_token_validity = 12
