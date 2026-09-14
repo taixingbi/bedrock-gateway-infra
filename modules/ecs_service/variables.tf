@@ -108,3 +108,22 @@ variable "jobs_table_arn" {
 variable "usage_table_arn" {
   type = string
 }
+
+# M11 Application Onboarding (plan section 22) -- all four required,
+# same "known after apply on first create" reasoning as
+# jobs_queue_arn/jobs_table_arn/usage_table_arn above.
+variable "onboarding_requests_table_arn" {
+  type = string
+}
+
+variable "onboarding_audit_table_arn" {
+  type = string
+}
+
+variable "provisioned_tenant_policies_table_arn" {
+  type = string
+}
+
+variable "provisioned_principal_mappings_table_arn" {
+  type = string
+}

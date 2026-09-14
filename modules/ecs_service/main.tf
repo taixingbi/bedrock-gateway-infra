@@ -258,6 +258,44 @@ resource "aws_iam_role_policy" "task_jobs" {
   policy = data.aws_iam_policy_document.jobs_access.json
 }
 
+# M11 Application Onboarding (plan section 22) -- provisioning runs
+# inline on the admin approve call (no separate worker), so gateway-api
+# itself needs read/write on all four tables. Scan is genuinely needed,
+# not a broad-grant shortcut: list_all()/list_tenant_ids()/list_grants()
+# have no better-known key to Query by at this scale (same tradeoff
+# jobs/store.py's DynamoDbJobStore already accepts).
+data "aws_iam_policy_document" "onboarding_access" {
+  statement {
+    sid       = "OnboardingRequests"
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Scan"]
+    resources = [var.onboarding_requests_table_arn]
+  }
+
+  statement {
+    sid       = "OnboardingAudit"
+    actions   = ["dynamodb:PutItem", "dynamodb:Query"]
+    resources = [var.onboarding_audit_table_arn]
+  }
+
+  statement {
+    sid       = "ProvisionedTenantPolicies"
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Scan"]
+    resources = [var.provisioned_tenant_policies_table_arn]
+  }
+
+  statement {
+    sid       = "ProvisionedPrincipalMappings"
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Scan"]
+    resources = [var.provisioned_principal_mappings_table_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "task_onboarding" {
+  name   = "${var.name_prefix}-onboarding-access"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.onboarding_access.json
+}
+
 # --- Task definition + service ------------------------------------------
 
 resource "aws_ecs_task_definition" "this" {

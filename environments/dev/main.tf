@@ -77,6 +77,11 @@ module "ecs_service" {
   jobs_table_arn  = aws_dynamodb_table.jobs.arn
   usage_table_arn = aws_dynamodb_table.usage.arn
 
+  onboarding_requests_table_arn            = aws_dynamodb_table.onboarding_requests.arn
+  onboarding_audit_table_arn               = aws_dynamodb_table.onboarding_audit.arn
+  provisioned_tenant_policies_table_arn    = aws_dynamodb_table.provisioned_tenant_policies.arn
+  provisioned_principal_mappings_table_arn = aws_dynamodb_table.provisioned_principal_mappings.arn
+
   container_env = {
     AWS_REGION            = var.aws_region
     BEDROCK_MODEL_ID      = var.bedrock_model_ids[0]
@@ -90,6 +95,11 @@ module "ecs_service" {
     JOBS_QUEUE_URL        = aws_sqs_queue.jobs.url
     JOBS_TABLE_NAME       = aws_dynamodb_table.jobs.name
     USAGE_TABLE_NAME      = aws_dynamodb_table.usage.name
+
+    ONBOARDING_REQUESTS_TABLE_NAME            = aws_dynamodb_table.onboarding_requests.name
+    ONBOARDING_AUDIT_TABLE_NAME               = aws_dynamodb_table.onboarding_audit.name
+    PROVISIONED_TENANT_POLICIES_TABLE_NAME    = aws_dynamodb_table.provisioned_tenant_policies.name
+    PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME = aws_dynamodb_table.provisioned_principal_mappings.name
 
     # Human auth (Cognito, via the portal) -- separate from the
     # AWS_IAM/SigV4 path service/application callers already use
@@ -157,6 +167,82 @@ resource "aws_dynamodb_table" "usage" {
   }
   attribute {
     name = "month"
+    type = "S"
+  }
+
+  tags = {
+    Environment = "dev"
+  }
+}
+
+# --- M11: Application Onboarding (plan section 22) -------------------------
+
+resource "aws_dynamodb_table" "onboarding_requests" {
+  name         = "${local.name_prefix}-onboarding-requests"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "request_id"
+
+  attribute {
+    name = "request_id"
+    type = "S"
+  }
+
+  tags = {
+    Environment = "dev"
+  }
+}
+
+# One row per (request_id, timestamp) -- a request's audit history is
+# always read as one ordered sequence, never looked up by event alone
+# (see onboarding/audit.py).
+resource "aws_dynamodb_table" "onboarding_audit" {
+  name         = "${local.name_prefix}-onboarding-audit"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "request_id"
+  range_key    = "timestamp"
+
+  attribute {
+    name = "request_id"
+    type = "S"
+  }
+  attribute {
+    name = "timestamp"
+    type = "N"
+  }
+
+  tags = {
+    Environment = "dev"
+  }
+}
+
+# Provisioned-only overlay on top of policies/tenants.yaml -- a tenant
+# provisioned through onboarding lives here; an existing hand-managed
+# tenant never does (see policy/store.py's LayeredPolicyStore).
+resource "aws_dynamodb_table" "provisioned_tenant_policies" {
+  name         = "${local.name_prefix}-provisioned-tenant-policies"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "tenant_id"
+
+  attribute {
+    name = "tenant_id"
+    type = "S"
+  }
+
+  tags = {
+    Environment = "dev"
+  }
+}
+
+# Provisioned-only overlay on top of policies/iam_tenants.yaml -- same
+# reasoning as provisioned_tenant_policies above, for the AWS_IAM/SigV4
+# auth path (see auth/aws_iam.py's LayeredIamTenantResolver).
+resource "aws_dynamodb_table" "provisioned_principal_mappings" {
+  name         = "${local.name_prefix}-provisioned-principal-mappings"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "principal_arn"
+
+  attribute {
+    name = "principal_arn"
     type = "S"
   }
 
