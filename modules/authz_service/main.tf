@@ -24,7 +24,7 @@ resource "aws_cloudwatch_log_group" "this" {
 
 resource "aws_security_group" "alb" {
   name        = "${var.name_prefix}-alb"
-  description = "authz-service ALB -- ingress from gateway-api's task SG only"
+  description = "authz-service ALB -- ingress from the gateway-api task SG only"
   vpc_id      = var.vpc_id
 
   ingress {
