@@ -215,9 +215,17 @@ data "aws_iam_policy_document" "authz_deploy" {
   }
 
   statement {
-    sid       = "PassExecutionRole"
-    actions   = ["iam:PassRole"]
-    resources = ["arn:aws:iam::${local.account_id}:role/${each.value}*-execution"]
+    sid     = "PassTaskRoles"
+    actions = ["iam:PassRole"]
+    # Both the execution role and the task role -- ECS
+    # RegisterTaskDefinition needs to pass both when a task
+    # definition specifies task_role_arn too, not just
+    # execution_role_arn (confirmed live: this deploy failed with
+    # "not authorized to perform: iam:PassRole on ...-task").
+    resources = [
+      "arn:aws:iam::${local.account_id}:role/${each.value}*-execution",
+      "arn:aws:iam::${local.account_id}:role/${each.value}*-task",
+    ]
   }
 }
 
