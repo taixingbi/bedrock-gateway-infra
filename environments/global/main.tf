@@ -25,11 +25,12 @@ data "aws_caller_identity" "current" {}
 locals {
   account_id = data.aws_caller_identity.current.account_id
 
-  app_repo      = "bedrock-gateway-app"
-  infra_repo    = "bedrock-gateway-infra"
-  policies_repo = "bedrock-gateway-policies"
-  portal_repo   = "bedrock-gateway-portal"
-  authz_repo    = "bedrock-authz-service"
+  app_repo         = "bedrock-gateway-app"
+  infra_repo       = "bedrock-gateway-infra"
+  policies_repo    = "bedrock-gateway-policies"
+  portal_repo      = "bedrock-gateway-portal"
+  authz_repo       = "bedrock-authz-service"
+  api_gateway_repo = "bedrock-api-gateway"
 }
 
 # --- App repo: push to ECR, deploy to ECS. Same shape this account
@@ -420,6 +421,88 @@ module "github_oidc_infra" {
     apply-prod = {
       role_name   = "gha-infra-apply-prod"
       policy_json = data.aws_iam_policy_document.infra_apply.json
+    }
+  }
+}
+
+# --- bedrock-api-gateway repo (M12/plan.md Section 25 split): same
+# plan/apply-dev/apply-prod shape as this repo's own roles above --
+# it's Terraform doing plan+apply too, not a Docker build+deploy repo
+# like app/portal/authz. Scoped to exactly what modules/api_gateway
+# (that repo) touches: EC2 (its own VPC Link security group),
+# ELB read-only (looks up the existing ALB/listener by name, doesn't
+# manage it), and API Gateway v2 itself. --------------------------
+
+data "aws_iam_policy_document" "api_gateway_plan" {
+  statement {
+    sid = "ReadOnly"
+    actions = [
+      "ec2:Describe*",
+      "elasticloadbalancing:Describe*",
+      "apigateway:GET",
+      "sts:GetCallerIdentity",
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "TerraformStateDynamoDbLock"
+    actions   = ["dynamodb:GetItem", "dynamodb:DescribeTable"]
+    resources = ["arn:aws:dynamodb:*:${local.account_id}:table/*tfstate*"]
+  }
+  statement {
+    sid       = "TerraformStateS3"
+    actions   = ["s3:GetObject", "s3:ListBucket"]
+    resources = ["arn:aws:s3:::*tfstate*", "arn:aws:s3:::*tfstate*/*"]
+  }
+}
+
+data "aws_iam_policy_document" "api_gateway_apply" {
+  statement {
+    sid       = "Ec2Broad"
+    actions   = ["ec2:*"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "ElbReadOnly"
+    actions   = ["elasticloadbalancing:Describe*"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "ApiGatewayBroad"
+    actions   = ["apigateway:*"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "TerraformStateDynamoDbLock"
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:DescribeTable"]
+    resources = ["arn:aws:dynamodb:*:${local.account_id}:table/*tfstate*"]
+  }
+  statement {
+    sid       = "TerraformStateS3"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+    resources = ["arn:aws:s3:::*tfstate*", "arn:aws:s3:::*tfstate*/*"]
+  }
+}
+
+module "github_oidc_api_gateway" {
+  source = "../../modules/github_oidc"
+
+  create_oidc_provider = false
+  github_org           = var.github_org
+  github_repo          = local.api_gateway_repo
+
+  roles = {
+    plan = {
+      role_name   = "gha-api-gateway-plan"
+      policy_json = data.aws_iam_policy_document.api_gateway_plan.json
+    }
+    apply-dev = {
+      role_name   = "gha-api-gateway-apply-dev"
+      policy_json = data.aws_iam_policy_document.api_gateway_apply.json
+    }
+    apply-prod = {
+      role_name   = "gha-api-gateway-apply-prod"
+      policy_json = data.aws_iam_policy_document.api_gateway_apply.json
     }
   }
 }
