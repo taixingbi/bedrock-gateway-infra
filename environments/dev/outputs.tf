@@ -3,15 +3,9 @@ output "alb_dns_name" {
   value       = module.ecs_service.alb_dns_name
 }
 
-output "api_gateway_url" {
-  description = "Base URL. Append /v1/chat for JWT calls, /iam/v1/chat for SigV4-signed calls."
-  value       = module.api_gateway.api_endpoint
-}
-
-output "execute_api_arn_iam_route" {
-  description = "Grant execute-api:Invoke on this ARN to any IAM principal that should reach /iam/*."
-  value       = module.api_gateway.execute_api_arn_iam_route
-}
+# api_gateway_url / execute_api_arn_iam_route moved to the
+# bedrock-api-gateway repo's own outputs (plan.md Section 25) -- this
+# repo no longer owns that resource.
 
 output "ecr_repository_url" {
   value = module.ecr.repository_url

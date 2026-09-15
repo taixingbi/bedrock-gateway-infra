@@ -1,8 +1,8 @@
 # ECS Fargate service fronted by a private ALB, reachable only through
-# API Gateway's VPC Link (see infra/modules/api_gateway) -- never
-# directly from the internet. HTTP only for now (TLS terminates at API
-# Gateway); add an ACM cert on the ALB listener too if that ever needs
-# to change.
+# API Gateway's VPC Link (see the bedrock-api-gateway repo, split out
+# of this one -- plan.md Section 25) -- never directly from the
+# internet. HTTP only for now (TLS terminates at API Gateway); add an
+# ACM cert on the ALB listener too if that ever needs to change.
 
 resource "aws_ecs_cluster" "this" {
   name = "${var.name_prefix}-cluster"

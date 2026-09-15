@@ -30,25 +30,14 @@ module "ecr" {
   environment     = "dev"
 }
 
-# Shared by ecs_service (the ALB's only allowed ingress) and api_gateway
-# (the VPC Link's ENIs) -- created at the root to avoid a circular
-# module dependency: ecs_service needs this SG id, api_gateway needs
-# ecs_service's alb_listener_arn.
-resource "aws_security_group" "vpc_link" {
-  name        = "${local.name_prefix}-vpc-link"
-  description = "API Gateway VPC Link ENIs -- egress only, reaches the private ALB"
-  vpc_id      = module.network.vpc_id
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Environment = "dev"
-  }
+# API Gateway (the VPC Link's ENIs, and everything else under
+# modules/api_gateway) moved out to the bedrock-api-gateway repo --
+# see plan.md Section 25. This looks its security group up by name
+# (never a cross-repo state reference) so ecs_service's ALB can allow
+# it as ingress regardless of which repo created it.
+data "aws_security_group" "api_gateway_vpc_link" {
+  name   = "${local.name_prefix}-api-gw-vpc-link"
+  vpc_id = module.network.vpc_id
 }
 
 module "ecs_service" {
@@ -59,7 +48,7 @@ module "ecs_service" {
   aws_region                 = var.aws_region
   vpc_id                     = module.network.vpc_id
   public_subnet_ids          = module.network.public_subnet_ids
-  vpc_link_security_group_id = aws_security_group.vpc_link.id
+  vpc_link_security_group_id = data.aws_security_group.api_gateway_vpc_link.id
 
   # No image has been pushed on a first apply -- CI registers the real
   # task definition revision on its first deploy (see infra/README.md).
@@ -335,15 +324,6 @@ module "worker_service" {
   }
 }
 
-module "api_gateway" {
-  source = "../../modules/api_gateway"
-
-  name_prefix                = local.name_prefix
-  alb_listener_arn           = module.ecs_service.alb_listener_arn
-  vpc_link_subnet_ids        = module.network.public_subnet_ids
-  vpc_link_security_group_id = aws_security_group.vpc_link.id
-}
-
 # --- M10: self-service portal ---------------------------------------------
 
 module "ecr_portal" {
@@ -369,7 +349,12 @@ module "portal_service" {
   container_env = {
     # The portal's admin bearer-token auth goes over the open JWT
     # route -- not /iam/*, that one's for SigV4-signing machine callers.
-    GATEWAY_API_URL = module.api_gateway.api_endpoint
+    # Hardcoded, not a module reference: api_gateway moved to the
+    # bedrock-api-gateway repo (plan.md Section 25) -- this is that
+    # repo's real, already-applied api_endpoint output. Update this if
+    # that API Gateway is ever destroyed and recreated (a new one gets
+    # a new endpoint).
+    GATEWAY_API_URL = "https://as1n3q8d33.execute-api.us-east-1.amazonaws.com"
 
     COGNITO_DOMAIN        = module.cognito_idp.hosted_ui_domain
     COGNITO_CLIENT_ID     = module.cognito_idp.client_id
