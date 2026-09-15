@@ -17,3 +17,8 @@ output "portal_deploy_role_arns" {
   description = "Set as AWS_PORTAL_DEPLOY_ROLE_ARN_DEV / _PROD in bedrock-gateway-portal's GitHub Environment variables."
   value       = module.github_oidc_portal.role_arns
 }
+
+output "authz_deploy_role_arns" {
+  description = "Set as AWS_AUTHZ_DEPLOY_ROLE_ARN_DEV / _PROD in bedrock-authz-service's GitHub Environment variables."
+  value       = module.github_oidc_authz.role_arns
+}

@@ -101,6 +101,14 @@ module "ecs_service" {
     PROVISIONED_TENANT_POLICIES_TABLE_NAME    = aws_dynamodb_table.provisioned_tenant_policies.name
     PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME = aws_dynamodb_table.provisioned_principal_mappings.name
 
+    # M12 (plan.md Section 5): delegates AWS_IAM principal mapping to
+    # authz-service instead of resolving it in-process. Plain HTTP --
+    # this is an internal call between two ECS tasks in the same VPC,
+    # never leaves it (module.authz_service's ALB is `internal = true`
+    # and its security group only accepts traffic from this service's
+    # own task SG).
+    AUTHZ_SERVICE_URL = "http://${module.authz_service.alb_dns_name}"
+
     # Human auth (Cognito, via the portal) -- separate from the
     # AWS_IAM/SigV4 path service/application callers already use
     # (auth/aws_iam.py), which needs nothing here. Falls back to the
@@ -248,6 +256,43 @@ resource "aws_dynamodb_table" "provisioned_principal_mappings" {
 
   tags = {
     Environment = "dev"
+  }
+}
+
+# --- M12: Authorization Service (plan.md Section 5) -------------------
+
+module "ecr_authz" {
+  source = "../../modules/ecr"
+
+  repository_name = "${local.name_prefix}-authz"
+  environment     = "dev"
+}
+
+module "authz_service" {
+  source = "../../modules/authz_service"
+
+  name_prefix       = "${local.name_prefix}-authz"
+  environment       = "dev"
+  aws_region        = var.aws_region
+  vpc_id            = module.network.vpc_id
+  public_subnet_ids = module.network.public_subnet_ids
+
+  # Only gateway-api may call this -- not API Gateway, not the
+  # internet. See modules/authz_service's own comment.
+  caller_security_group_id = module.ecs_service.task_security_group_id
+
+  # No image has been pushed on a first apply -- CI registers the real
+  # task definition revision on its first deploy, same as gateway-api.
+  image = "${module.ecr_authz.repository_url}:bootstrap"
+
+  provisioned_principal_mappings_table_arn = aws_dynamodb_table.provisioned_principal_mappings.arn
+
+  container_env = {
+    AWS_REGION                                = var.aws_region
+    SERVICE_NAME                              = "${local.name_prefix}-authz"
+    LOG_LEVEL                                 = "INFO"
+    IAM_TENANTS_PATH                          = "policies/iam_tenants.yaml"
+    PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME = aws_dynamodb_table.provisioned_principal_mappings.name
   }
 }
 

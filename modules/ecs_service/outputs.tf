@@ -22,3 +22,8 @@ output "task_definition_family" {
 output "log_group_name" {
   value = aws_cloudwatch_log_group.this.name
 }
+
+output "task_security_group_id" {
+  description = "M12: the gateway-api task's own SG, so modules/authz_service can scope its ALB ingress to exactly this caller and nothing else."
+  value       = aws_security_group.service.id
+}

@@ -29,6 +29,7 @@ locals {
   infra_repo    = "bedrock-gateway-infra"
   policies_repo = "bedrock-gateway-policies"
   portal_repo   = "bedrock-gateway-portal"
+  authz_repo    = "bedrock-authz-service"
 }
 
 # --- App repo: push to ECR, deploy to ECS. Same shape this account
@@ -169,6 +170,72 @@ module "github_oidc_portal" {
     prod = {
       role_name   = "gha-portal-deploy-prod"
       policy_json = data.aws_iam_policy_document.portal_deploy["prod"].json
+    }
+  }
+}
+
+# --- authz-service repo (M12): same shape as portal_deploy above --
+# push to ECR, register+deploy a task definition. No worker split, one
+# service, matching bedrock-gateway-portal's simpler CI shape rather
+# than bedrock-gateway-app's two-service one. ------------------------
+
+data "aws_iam_policy_document" "authz_deploy" {
+  for_each = { dev = "gateway-dev-authz", prod = "gateway-prod-authz" }
+
+  statement {
+    sid = "PushToEcr"
+    actions = [
+      "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage", "ecr:BatchCheckLayerAvailability",
+      "ecr:PutImage", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload",
+    ]
+    resources = ["arn:aws:ecr:${var.aws_region}:${local.account_id}:repository/${each.value}*"]
+  }
+
+  statement {
+    sid       = "EcrAuth"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "DeployToEcs"
+    actions   = ["ecs:DescribeServices", "ecs:UpdateService"]
+    resources = ["*"]
+    condition {
+      test     = "ArnLike"
+      variable = "ecs:cluster"
+      values   = ["arn:aws:ecs:${var.aws_region}:${local.account_id}:cluster/${each.value}*"]
+    }
+  }
+
+  statement {
+    sid       = "RegisterTaskDefinition"
+    actions   = ["ecs:RegisterTaskDefinition", "ecs:DescribeTaskDefinition"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "PassExecutionRole"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${local.account_id}:role/${each.value}*-execution"]
+  }
+}
+
+module "github_oidc_authz" {
+  source = "../../modules/github_oidc"
+
+  create_oidc_provider = false
+  github_org           = var.github_org
+  github_repo          = local.authz_repo
+
+  roles = {
+    dev = {
+      role_name   = "gha-authz-deploy-dev"
+      policy_json = data.aws_iam_policy_document.authz_deploy["dev"].json
+    }
+    prod = {
+      role_name   = "gha-authz-deploy-prod"
+      policy_json = data.aws_iam_policy_document.authz_deploy["prod"].json
     }
   }
 }
