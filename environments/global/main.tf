@@ -450,6 +450,19 @@ data "aws_iam_policy_document" "api_gateway_plan" {
     resources = ["*"]
   }
   statement {
+    # Added for the module's access_log_settings CloudWatch log group +
+    # resource policy (plan.md's live gap: the plan/apply-dev roles
+    # predate that resource, so a plan against it 403s with
+    # AccessDeniedException on logs:DescribeLogGroups otherwise).
+    sid = "LogsReadOnly"
+    actions = [
+      "logs:Describe*",
+      "logs:List*",
+      "logs:GetLogGroupFields",
+    ]
+    resources = ["*"]
+  }
+  statement {
     sid       = "TerraformStateDynamoDbLock"
     actions   = ["dynamodb:GetItem", "dynamodb:DescribeTable"]
     resources = ["arn:aws:dynamodb:*:${local.account_id}:table/*tfstate*"]
@@ -475,6 +488,14 @@ data "aws_iam_policy_document" "api_gateway_apply" {
   statement {
     sid       = "ApiGatewayBroad"
     actions   = ["apigateway:*"]
+    resources = ["*"]
+  }
+  statement {
+    # Added for the module's access_log_settings CloudWatch log group +
+    # resource policy (see api_gateway_plan's LogsReadOnly comment --
+    # apply needs to create/update/delete both, not just read them).
+    sid       = "LogsBroad"
+    actions   = ["logs:*"]
     resources = ["*"]
   }
   statement {
