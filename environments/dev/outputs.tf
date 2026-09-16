@@ -4,7 +4,7 @@ output "alb_dns_name" {
 }
 
 # api_gateway_url / execute_api_arn_iam_route moved to the
-# bedrock-api-gateway repo's own outputs (plan.md Section 25) -- this
+# platform-api-gateway repo's own outputs (plan.md Section 25) -- this
 # repo no longer owns that resource.
 
 output "ecr_repository_url" {

@@ -25,12 +25,17 @@ data "aws_caller_identity" "current" {}
 locals {
   account_id = data.aws_caller_identity.current.account_id
 
-  app_repo         = "bedrock-gateway-app"
-  infra_repo       = "bedrock-gateway-infra"
-  policies_repo    = "bedrock-gateway-policies"
-  portal_repo      = "bedrock-gateway-portal"
-  authz_repo       = "bedrock-authz-service"
-  api_gateway_repo = "bedrock-api-gateway"
+  app_repo      = "bedrock-gateway-app"
+  infra_repo    = "bedrock-gateway-infra"
+  policies_repo = "bedrock-gateway-policies"
+  portal_repo   = "bedrock-gateway-portal"
+  # Named "platform-*", not "bedrock-*" -- both are provider-agnostic
+  # infrastructure (principal mapping/RBAC, HTTP API front door) that
+  # any future non-Bedrock AI-provider gateway on this platform could
+  # share, unlike the other four bedrock-gateway-* repos which are
+  # genuinely Bedrock-specific application code.
+  authz_repo       = "platform-authz-service"
+  api_gateway_repo = "platform-api-gateway"
 }
 
 # --- App repo: push to ECR, deploy to ECS. Same shape this account
@@ -425,7 +430,7 @@ module "github_oidc_infra" {
   }
 }
 
-# --- bedrock-api-gateway repo (M12/plan.md Section 25 split): same
+# --- platform-api-gateway repo (M12/plan.md Section 25 split): same
 # plan/apply-dev/apply-prod shape as this repo's own roles above --
 # it's Terraform doing plan+apply too, not a Docker build+deploy repo
 # like app/portal/authz. Scoped to exactly what modules/api_gateway

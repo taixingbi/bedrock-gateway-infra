@@ -22,7 +22,7 @@ variable "public_subnet_ids" {
 }
 
 variable "vpc_link_security_group_id" {
-  description = "Security group of the API Gateway VPC Link that's the ALB's only allowed ingress source (the ALB is private -- API Gateway now lives in the separate bedrock-api-gateway repo, looked up by name at the caller, not referenced directly)."
+  description = "Security group of the API Gateway VPC Link that's the ALB's only allowed ingress source (the ALB is private -- API Gateway now lives in the separate platform-api-gateway repo, looked up by name at the caller, not referenced directly)."
   type        = string
 }
 

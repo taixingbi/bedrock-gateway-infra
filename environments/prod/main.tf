@@ -31,11 +31,11 @@ module "ecr" {
 }
 
 # API Gateway (the VPC Link's ENIs, and everything else under
-# modules/api_gateway) moved out to the bedrock-api-gateway repo --
+# modules/api_gateway) moved out to the platform-api-gateway repo --
 # see plan.md Section 25. This looks its security group up by name
 # (never a cross-repo state reference) so ecs_service's ALB can allow
 # it as ingress regardless of which repo created it. Not yet real for
-# prod -- bedrock-api-gateway's own environments/prod hasn't been
+# prod -- platform-api-gateway's own environments/prod hasn't been
 # applied yet (prod is held, same standing pattern as everything
 # else); this data source will fail to resolve until it has been.
 data "aws_security_group" "api_gateway_vpc_link" {
@@ -281,7 +281,7 @@ module "portal_service" {
   image = "${module.ecr_portal.repository_url}:bootstrap"
 
   container_env = {
-    # Placeholder -- bedrock-api-gateway's environments/prod hasn't
+    # Placeholder -- platform-api-gateway's environments/prod hasn't
     # been applied yet (prod is held). Replace with its real
     # api_endpoint output once it has, same as environments/dev/main.tf
     # already does.

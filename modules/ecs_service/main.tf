@@ -1,5 +1,5 @@
 # ECS Fargate service fronted by a private ALB, reachable only through
-# API Gateway's VPC Link (see the bedrock-api-gateway repo, split out
+# API Gateway's VPC Link (see the platform-api-gateway repo, split out
 # of this one -- plan.md Section 25) -- never directly from the
 # internet. HTTP only for now (TLS terminates at API Gateway); add an
 # ACM cert on the ALB listener too if that ever needs to change.

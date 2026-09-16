@@ -31,7 +31,7 @@ module "ecr" {
 }
 
 # API Gateway (the VPC Link's ENIs, and everything else under
-# modules/api_gateway) moved out to the bedrock-api-gateway repo --
+# modules/api_gateway) moved out to the platform-api-gateway repo --
 # see plan.md Section 25. This looks its security group up by name
 # (never a cross-repo state reference) so ecs_service's ALB can allow
 # it as ingress regardless of which repo created it.
@@ -350,7 +350,7 @@ module "portal_service" {
     # The portal's admin bearer-token auth goes over the open JWT
     # route -- not /iam/*, that one's for SigV4-signing machine callers.
     # Hardcoded, not a module reference: api_gateway moved to the
-    # bedrock-api-gateway repo (plan.md Section 25) -- this is that
+    # platform-api-gateway repo (plan.md Section 25) -- this is that
     # repo's real, already-applied api_endpoint output. Update this if
     # that API Gateway is ever destroyed and recreated (a new one gets
     # a new endpoint).
