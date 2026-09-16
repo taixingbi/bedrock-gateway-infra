@@ -53,6 +53,12 @@ variable "log_retention_days" {
   default = 30
 }
 
+variable "log_group_name" {
+  description = "Override for the CloudWatch log group name; defaults to \"/ecs/<name_prefix>\" when empty."
+  type        = string
+  default     = ""
+}
+
 variable "container_env" {
   type    = map(string)
   default = {}

@@ -52,6 +52,7 @@ module "ecs_service" {
   vpc_id                     = module.network.vpc_id
   public_subnet_ids          = module.network.public_subnet_ids
   vpc_link_security_group_id = data.aws_security_group.api_gateway_vpc_link.id
+  log_group_name             = "/ai-platform/ecs/bedrock-gateway-api-prod"
 
   # No image has been pushed on a first apply -- CI registers the real
   # task definition revision on its first deploy (see infra/README.md).
@@ -232,6 +233,7 @@ module "worker_service" {
   vpc_id            = module.network.vpc_id
   public_subnet_ids = module.network.public_subnet_ids
   cluster_name      = module.ecs_service.cluster_name
+  log_group_name    = "/ai-platform/ecs/bedrock-gateway-worker-prod"
 
   # Same image as gateway-api -- same codebase, different command.
   image   = "${module.ecr.repository_url}:bootstrap"
@@ -277,6 +279,7 @@ module "portal_service" {
   aws_region        = var.aws_region
   vpc_id            = module.network.vpc_id
   public_subnet_ids = module.network.public_subnet_ids
+  log_group_name    = "/ai-platform/ecs/bedrock-gateway-portal-prod"
 
   image = "${module.ecr_portal.repository_url}:bootstrap"
 

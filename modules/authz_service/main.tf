@@ -18,7 +18,7 @@ resource "aws_ecs_cluster" "this" {
 }
 
 resource "aws_cloudwatch_log_group" "this" {
-  name              = "/ecs/${var.name_prefix}"
+  name              = var.log_group_name != "" ? var.log_group_name : "/ecs/${var.name_prefix}"
   retention_in_days = var.log_retention_days
 }
 
