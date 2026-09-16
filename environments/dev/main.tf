@@ -422,6 +422,24 @@ resource "aws_cognito_user" "admin" {
   }
 
   desired_delivery_mediums = ["EMAIL"]
+
+  # The AWS provider's refresh for this resource's `attributes` never
+  # actually converges with real Cognito state: every single apply
+  # this session re-proposed "remove tenant_id/application_id (no
+  # such bare attribute has ever existed -- Cognito always stores
+  # custom schema attributes as custom:tenant_id/custom:application_id),
+  # add custom:tenant_id/custom:application_id" -- a permanent phantom
+  # diff. Previously assumed harmless/cosmetic; confirmed live it
+  # is NOT -- one such apply actually deleted the real custom:*
+  # attributes from the live user entirely (portal login then failed
+  # with "token is missing required claim(s)"), rather than the
+  # no-op it looked like every prior time. Ignore this attribute
+  # going forward -- it's provisioned once above; anyone reprovisioning
+  # it should do so by hand (aws cognito-idp admin-update-user-attributes),
+  # not via a Terraform apply this provider can't be trusted with.
+  lifecycle {
+    ignore_changes = [attributes]
+  }
 }
 
 resource "aws_cognito_user_in_group" "admin_is_platform_admin" {
