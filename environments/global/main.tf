@@ -297,6 +297,10 @@ data "aws_iam_policy_document" "infra_plan" {
       # same read, needed to plan module.portal_service's prefix-list
       # ingress rule.
       "ec2:GetManagedPrefixListEntries",
+      # Internal TLS (gateway-api <-> authz-service): the private CA
+      # and the ACM cert it issues.
+      "acm-pca:Describe*", "acm-pca:Get*", "acm-pca:List*",
+      "acm:Describe*", "acm:Get*", "acm:List*",
     ]
     resources = ["*"]
   }
@@ -359,6 +363,20 @@ data "aws_iam_policy_document" "infra_apply" {
   statement {
     sid       = "CloudFrontBroad"
     actions   = ["cloudfront:*"]
+    resources = ["*"]
+  }
+  # Internal TLS (gateway-api <-> authz-service): creating/activating
+  # the private CA and issuing authz-service's ALB cert from it. Learned
+  # live -- the first apply attempting this 403'd, since neither
+  # acm-pca:* nor acm:* had ever been granted before this.
+  statement {
+    sid       = "AcmPcaBroad"
+    actions   = ["acm-pca:*"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "AcmBroad"
+    actions   = ["acm:*"]
     resources = ["*"]
   }
 
