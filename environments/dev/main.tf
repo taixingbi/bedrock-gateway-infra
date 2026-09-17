@@ -93,12 +93,18 @@ module "ecs_service" {
     PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME = aws_dynamodb_table.provisioned_principal_mappings.name
 
     # M12 (plan.md Section 5): delegates AWS_IAM principal mapping to
-    # authz-service instead of resolving it in-process. Plain HTTP --
-    # this is an internal call between two ECS tasks in the same VPC,
-    # never leaves it (module.authz_service's ALB is `internal = true`
+    # authz-service instead of resolving it in-process. HTTPS via a
+    # private-CA-issued cert (see aws_acmpca_certificate_authority.
+    # internal above) -- this is an internal call between two ECS tasks
+    # in the same VPC (module.authz_service's ALB is `internal = true`
     # and its security group only accepts traffic from this service's
-    # own task SG).
-    AUTHZ_SERVICE_URL = "http://${module.authz_service.alb_dns_name}"
+    # own task SG), but encrypted in transit and authenticated against
+    # the pinned CA rather than relying on the VPC boundary alone.
+    AUTHZ_SERVICE_URL = "https://${module.authz_service.alb_dns_name}"
+    # HttpIamTenantResolver trusts exactly this CA (not the system
+    # trust store) since it's privately issued -- see
+    # auth/aws_iam.py's HttpIamTenantResolver and config.py.
+    AUTHZ_CA_CERT_PEM = aws_acmpca_certificate.internal_root.certificate
 
     # Human auth (Cognito, via the portal) -- separate from the
     # AWS_IAM/SigV4 path service/application callers already use
@@ -259,6 +265,58 @@ module "ecr_authz" {
   environment     = "dev"
 }
 
+# --- Internal TLS: gateway-api <-> authz-service ---------------------------
+#
+# Real recurring cost: AWS Private CA bills ~$400/month regardless of
+# usage, on top of the ALB itself. Created here (dev only, not
+# environments/global) since only dev is live -- if/when prod is
+# applied, either share this CA (a data-source lookup by ARN, same
+# convention api_gateway_vpc_link already uses for cross-environment
+# coupling) or accept a second $400/mo CA for prod's own isolation.
+#
+# Standard HashiCorp-documented bootstrap for a self-signed private
+# root CA: create the CA, self-sign its own CSR, then import that
+# signature back to activate it. aws_acm_certificate.this (in
+# modules/authz_service) is issued straight from this CA -- no DNS/
+# email domain validation needed (unlike a public ACM cert), since a
+# private CA is trusted because IT signed it, not because you proved
+# domain ownership.
+resource "aws_acmpca_certificate_authority" "internal" {
+  type = "ROOT"
+
+  certificate_authority_configuration {
+    key_algorithm     = "RSA_2048"
+    signing_algorithm = "SHA256WITHRSA"
+
+    subject {
+      common_name = "Bedrock Gateway Platform Internal CA"
+    }
+  }
+
+  # Minimum allowed -- no benefit to a longer grace period for
+  # infrastructure like this, and every extra day is another day of
+  # possible billing on a CA nobody meant to keep.
+  permanent_deletion_time_in_days = 7
+}
+
+resource "aws_acmpca_certificate" "internal_root" {
+  certificate_authority_arn   = aws_acmpca_certificate_authority.internal.arn
+  certificate_signing_request = aws_acmpca_certificate_authority.internal.certificate_signing_request
+  signing_algorithm           = "SHA256WITHRSA"
+  template_arn                = "arn:aws:acm-pca:::template/RootCACertificate/V1"
+
+  validity {
+    type  = "YEARS"
+    value = 10
+  }
+}
+
+resource "aws_acmpca_certificate_authority_certificate" "internal" {
+  certificate_authority_arn = aws_acmpca_certificate_authority.internal.arn
+  certificate               = aws_acmpca_certificate.internal_root.certificate
+  certificate_chain         = aws_acmpca_certificate.internal_root.certificate_chain
+}
+
 module "authz_service" {
   source = "../../modules/authz_service"
 
@@ -268,6 +326,10 @@ module "authz_service" {
   vpc_id            = module.network.vpc_id
   public_subnet_ids = module.network.public_subnet_ids
   log_group_name    = "/ai-platform/ecs/platform-authz-service-dev"
+  # The activation resource's own ARN, not the bare CA's -- so
+  # Terraform waits for the CA to actually be ACTIVE before the
+  # module's aws_acm_certificate tries to request a cert from it.
+  private_ca_arn = aws_acmpca_certificate_authority_certificate.internal.certificate_authority_arn
 
   # Only gateway-api may call this -- not API Gateway, not the
   # internet. See modules/authz_service's own comment.

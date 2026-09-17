@@ -59,6 +59,11 @@ variable "log_group_name" {
   default     = ""
 }
 
+variable "private_ca_arn" {
+  description = "ACM Private CA to issue this ALB's HTTPS listener certificate from -- must already be ACTIVE (pass the activation resource's own ARN, not the bare CA's, so Terraform sequences correctly)."
+  type        = string
+}
+
 variable "container_env" {
   type    = map(string)
   default = {}

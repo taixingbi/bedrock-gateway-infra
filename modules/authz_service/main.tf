@@ -28,9 +28,9 @@ resource "aws_security_group" "alb" {
   vpc_id      = var.vpc_id
 
   ingress {
-    description     = "From gateway-api"
-    from_port       = 80
-    to_port         = 80
+    description     = "From gateway-api, HTTPS only"
+    from_port       = 443
+    to_port         = 443
     protocol        = "tcp"
     security_groups = [var.caller_security_group_id]
   }
@@ -101,10 +101,20 @@ resource "aws_lb_target_group" "this" {
   }
 }
 
-resource "aws_lb_listener" "http" {
+# Private-CA-issued -- no domain ownership validation needed (unlike a
+# public ACM cert), so the ALB's own auto-generated DNS name works
+# directly as the cert's domain, no custom Route53 zone required.
+resource "aws_acm_certificate" "this" {
+  domain_name               = aws_lb.this.dns_name
+  certificate_authority_arn = var.private_ca_arn
+}
+
+resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.this.arn
-  port              = 80
-  protocol          = "HTTP"
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = aws_acm_certificate.this.arn
 
   default_action {
     type             = "forward"
@@ -219,7 +229,7 @@ resource "aws_ecs_service" "this" {
     ignore_changes = [task_definition, desired_count]
   }
 
-  depends_on = [aws_lb_listener.http]
+  depends_on = [aws_lb_listener.https]
 
   tags = {
     Environment = var.environment
