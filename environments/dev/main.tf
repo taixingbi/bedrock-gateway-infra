@@ -78,6 +78,7 @@ module "ecs_service" {
     GATEWAY_HOST          = "0.0.0.0"
     GATEWAY_PORT          = "8080"
     SERVICE_NAME          = local.name_prefix
+    ENVIRONMENT           = "dev"
     LOG_LEVEL             = "INFO"
     ROUTE_SET_CONFIG_PATH = "policies/route_sets.yaml"
     TENANT_POLICY_PATH    = "policies/tenants.yaml"
@@ -281,6 +282,7 @@ module "authz_service" {
   container_env = {
     AWS_REGION                                = var.aws_region
     SERVICE_NAME                              = "${local.name_prefix}-authz"
+    ENVIRONMENT                               = "dev"
     LOG_LEVEL                                 = "INFO"
     IAM_TENANTS_PATH                          = "policies/iam_tenants.yaml"
     PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME = aws_dynamodb_table.provisioned_principal_mappings.name
@@ -317,6 +319,8 @@ module "worker_service" {
     AWS_REGION            = var.aws_region
     BEDROCK_MODEL_ID      = var.bedrock_model_ids[0]
     SERVICE_NAME          = "${local.name_prefix}-worker"
+    SERVICE               = "bedrock-gateway-worker"
+    ENVIRONMENT           = "dev"
     LOG_LEVEL             = "INFO"
     ROUTE_SET_CONFIG_PATH = "policies/route_sets.yaml"
     TENANT_POLICY_PATH    = "policies/tenants.yaml"

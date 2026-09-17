@@ -80,6 +80,7 @@ module "ecs_service" {
     GATEWAY_HOST          = "0.0.0.0"
     GATEWAY_PORT          = "8080"
     SERVICE_NAME          = local.name_prefix
+    ENVIRONMENT           = "prod"
     LOG_LEVEL             = "INFO"
     ROUTE_SET_CONFIG_PATH = "policies/route_sets.yaml"
     TENANT_POLICY_PATH    = "policies/tenants.yaml"
@@ -252,6 +253,8 @@ module "worker_service" {
     AWS_REGION            = var.aws_region
     BEDROCK_MODEL_ID      = var.bedrock_model_ids[0]
     SERVICE_NAME          = "${local.name_prefix}-worker"
+    SERVICE               = "bedrock-gateway-worker"
+    ENVIRONMENT           = "prod"
     LOG_LEVEL             = "INFO"
     ROUTE_SET_CONFIG_PATH = "policies/route_sets.yaml"
     TENANT_POLICY_PATH    = "policies/tenants.yaml"
