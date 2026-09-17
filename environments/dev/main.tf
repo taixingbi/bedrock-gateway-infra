@@ -49,7 +49,7 @@ module "ecs_service" {
   vpc_id                     = module.network.vpc_id
   public_subnet_ids          = module.network.public_subnet_ids
   vpc_link_security_group_id = data.aws_security_group.api_gateway_vpc_link.id
-  log_group_name             = "/ai-platform/ecs/bedrock-gateway-api-dev"
+  log_group_name             = "/ai-platform/ecs/bedrock-gateway-dev"
 
   # No image has been pushed on a first apply -- CI registers the real
   # task definition revision on its first deploy (see infra/README.md).
