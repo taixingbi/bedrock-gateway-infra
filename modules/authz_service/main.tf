@@ -173,6 +173,40 @@ resource "aws_iam_role_policy" "task_principal_mappings" {
   policy = data.aws_iam_policy_document.principal_mappings_read.json
 }
 
+# --- Tracing: ADOT sidecar -> X-Ray (see modules/ecs_service's own
+# identical comment for why AOT_CONFIG_CONTENT + essential=false). ----
+locals {
+  adot_collector_config = <<-EOT
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+    exporters:
+      awsxray:
+        region: ${var.aws_region}
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [awsxray]
+  EOT
+}
+
+data "aws_iam_policy_document" "xray_write" {
+  statement {
+    sid       = "XRayWrite"
+    actions   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_xray" {
+  name   = "${var.name_prefix}-xray-write"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.xray_write.json
+}
+
 resource "aws_ecs_task_definition" "this" {
   family                   = var.name_prefix
   requires_compatibilities = ["FARGATE"]
@@ -202,6 +236,22 @@ resource "aws_ecs_task_definition" "this" {
           "awslogs-group"         = aws_cloudwatch_log_group.this.name
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "authz"
+        }
+      }
+    },
+    {
+      name      = "aws-otel-collector"
+      image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      essential = false
+      environment = [
+        { name = "AOT_CONFIG_CONTENT", value = local.adot_collector_config }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.this.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "adot"
         }
       }
     }

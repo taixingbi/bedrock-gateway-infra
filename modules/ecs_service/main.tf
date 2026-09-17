@@ -296,6 +296,45 @@ resource "aws_iam_role_policy" "task_onboarding" {
   policy = data.aws_iam_policy_document.onboarding_access.json
 }
 
+# --- Tracing: ADOT sidecar -> X-Ray -------------------------------------
+#
+# Own config passed inline via AOT_CONFIG_CONTENT (the ADOT image's own
+# documented mechanism for this) rather than the image's bundled ECS
+# preset -- explicit and known-correct beats guessing the preset's
+# exact filename/behavior. Reachable at localhost:4318 from the app
+# container since ECS tasks share one network namespace (awsvpc mode).
+locals {
+  adot_collector_config = <<-EOT
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+    exporters:
+      awsxray:
+        region: ${var.aws_region}
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [awsxray]
+  EOT
+}
+
+data "aws_iam_policy_document" "xray_write" {
+  statement {
+    sid       = "XRayWrite"
+    actions   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_xray" {
+  name   = "${var.name_prefix}-xray-write"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.xray_write.json
+}
+
 # --- Task definition + service ------------------------------------------
 
 resource "aws_ecs_task_definition" "this" {
@@ -327,6 +366,25 @@ resource "aws_ecs_task_definition" "this" {
           "awslogs-group"         = aws_cloudwatch_log_group.this.name
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "gateway"
+        }
+      }
+    },
+    {
+      # essential = false: a sidecar problem shouldn't take the whole
+      # task down -- tracing is additive observability, not a hard
+      # dependency for serving traffic.
+      name      = "aws-otel-collector"
+      image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      essential = false
+      environment = [
+        { name = "AOT_CONFIG_CONTENT", value = local.adot_collector_config }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.this.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "adot"
         }
       }
     }

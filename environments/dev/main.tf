@@ -106,6 +106,15 @@ module "ecs_service" {
     # auth/aws_iam.py's HttpIamTenantResolver and config.py.
     AUTHZ_CA_CERT_PEM = aws_acmpca_certificate.internal_root.certificate
 
+    # Tracing: the ADOT sidecar (modules/ecs_service) listens on
+    # localhost within this same task (awsvpc mode -- one network
+    # namespace per task), exporting to X-Ray. Full /v1/traces path
+    # required: telemetry/otel.py passes this straight to
+    # OTLPSpanExporter(endpoint=...), which only auto-appends that path
+    # when reading the endpoint from an env var ITSELF, not when it's
+    # passed explicitly like this.
+    OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318/v1/traces"
+
     # Human auth (Cognito, via the portal) -- separate from the
     # AWS_IAM/SigV4 path service/application callers already use
     # (auth/aws_iam.py), which needs nothing here. Falls back to the
@@ -339,6 +348,12 @@ module "authz_service" {
   # task definition revision on its first deploy, same as gateway-api.
   image = "${module.ecr_authz.repository_url}:bootstrap"
 
+  # Module defaults (256/512) were sized for the app alone -- doubled
+  # now that the ADOT sidecar shares this task's memory pool too, to
+  # avoid OOM risk from both containers running in 512MB.
+  task_cpu    = 512
+  task_memory = 1024
+
   provisioned_principal_mappings_table_arn = aws_dynamodb_table.provisioned_principal_mappings.arn
 
   container_env = {
@@ -348,6 +363,9 @@ module "authz_service" {
     LOG_LEVEL                                 = "INFO"
     IAM_TENANTS_PATH                          = "policies/iam_tenants.yaml"
     PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME = aws_dynamodb_table.provisioned_principal_mappings.name
+    # See gateway-api's own OTEL_EXPORTER_OTLP_ENDPOINT comment above --
+    # same ADOT-sidecar-on-localhost pattern, this service's own copy.
+    OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318/v1/traces"
   }
 }
 
