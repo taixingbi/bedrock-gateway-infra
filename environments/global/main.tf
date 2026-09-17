@@ -416,6 +416,17 @@ data "aws_iam_policy_document" "infra_apply" {
     actions   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
     resources = ["arn:aws:s3:::*tfstate*", "arn:aws:s3:::*tfstate*/*"]
   }
+  # S3AuditStore's bucket (gateway-{dev,prod}-audit) -- learned live, the
+  # first apply attempting this 403'd, since no S3 permission beyond the
+  # tfstate backend bucket had ever been granted before this. Bucket
+  # name IS predictable (this app's own naming convention), so scoped
+  # by name rather than "*" like the tfstate grant above would need to
+  # be if extended here too.
+  statement {
+    sid       = "S3AuditBucketBroad"
+    actions   = ["s3:*"]
+    resources = ["arn:aws:s3:::gateway-*-audit", "arn:aws:s3:::gateway-*-audit/*"]
+  }
 }
 
 module "github_oidc_infra" {
