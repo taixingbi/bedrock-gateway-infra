@@ -65,9 +65,10 @@ module "ecs_service" {
 
   bedrock_model_ids = var.bedrock_model_ids
 
-  jobs_queue_arn  = aws_sqs_queue.jobs.arn
-  jobs_table_arn  = aws_dynamodb_table.jobs.arn
-  usage_table_arn = aws_dynamodb_table.usage.arn
+  jobs_queue_arn   = aws_sqs_queue.jobs.arn
+  jobs_table_arn   = aws_dynamodb_table.jobs.arn
+  usage_table_arn  = aws_dynamodb_table.usage.arn
+  audit_bucket_arn = aws_s3_bucket.audit.arn
 
   onboarding_requests_table_arn            = aws_dynamodb_table.onboarding_requests.arn
   onboarding_audit_table_arn               = aws_dynamodb_table.onboarding_audit.arn
@@ -88,6 +89,7 @@ module "ecs_service" {
     JOBS_QUEUE_URL        = aws_sqs_queue.jobs.url
     JOBS_TABLE_NAME       = aws_dynamodb_table.jobs.name
     USAGE_TABLE_NAME      = aws_dynamodb_table.usage.name
+    AUDIT_BUCKET_NAME     = aws_s3_bucket.audit.id
 
     ONBOARDING_REQUESTS_TABLE_NAME            = aws_dynamodb_table.onboarding_requests.name
     ONBOARDING_AUDIT_TABLE_NAME               = aws_dynamodb_table.onboarding_audit.name
@@ -133,6 +135,53 @@ resource "aws_dynamodb_table" "jobs" {
 
   tags = {
     Environment = "prod"
+  }
+}
+
+# --- Audit payload store (S3AuditStore, services/gateway/telemetry/
+# debug_capture.py) -- one redacted JSON object per captured request,
+# opt-in per tenant (debug_capture_enabled). Encrypted, public access
+# fully blocked, one uniform lifecycle expiration for everyone -- true
+# per-tenant retention (TenantPolicy.debug_capture_retention_days)
+# isn't enforced yet, see that field's docstring for why.
+resource "aws_s3_bucket" "audit" {
+  bucket = "${local.name_prefix}-audit"
+
+  tags = {
+    Environment = "prod"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "audit" {
+  bucket = aws_s3_bucket.audit.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "audit" {
+  bucket = aws_s3_bucket.audit.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "audit" {
+  bucket = aws_s3_bucket.audit.id
+
+  rule {
+    id     = "expire-all-objects"
+    status = "Enabled"
+    filter {}
+
+    expiration {
+      days = 30
+    }
   }
 }
 

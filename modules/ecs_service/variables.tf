@@ -106,6 +106,10 @@ variable "jobs_table_arn" {
   type = string
 }
 
+variable "audit_bucket_arn" {
+  type = string
+}
+
 # M8 FinOps: gateway-api both reads (budget check before calling the
 # model) and writes (record spend after a successful response) this
 # table -- see usage/store.py's UsageStore. UpdateItem, not PutItem:

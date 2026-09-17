@@ -296,6 +296,24 @@ resource "aws_iam_role_policy" "task_onboarding" {
   policy = data.aws_iam_policy_document.onboarding_access.json
 }
 
+# S3AuditStore (services/gateway/telemetry/debug_capture.py) -- write
+# only, no Get/List/Delete. This is a durable audit trail; the gateway
+# task itself has no business reading its own past writes back, let
+# alone deleting them.
+data "aws_iam_policy_document" "audit_access" {
+  statement {
+    sid       = "AuditPayloadWrite"
+    actions   = ["s3:PutObject"]
+    resources = ["${var.audit_bucket_arn}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_audit" {
+  name   = "${var.name_prefix}-audit-access"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.audit_access.json
+}
+
 # --- Tracing: ADOT sidecar -> X-Ray -------------------------------------
 #
 # Own config passed inline via AOT_CONFIG_CONTENT (the ADOT image's own
