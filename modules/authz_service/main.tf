@@ -102,10 +102,18 @@ resource "aws_lb_target_group" "this" {
 }
 
 # Private-CA-issued -- no domain ownership validation needed (unlike a
-# public ACM cert), so the ALB's own auto-generated DNS name works
-# directly as the cert's domain, no custom Route53 zone required.
+# public ACM cert), so the ALB's own auto-generated DNS name can be
+# used directly, no custom Route53 zone required. It can't be the
+# domain_name/CN field itself though -- ACM enforces a 64-character CN
+# limit (learned live: "internal-gateway-dev-authz-alb-..." is 69) --
+# so a short placeholder goes there instead, and the real (long) ALB
+# DNS name goes in subject_alternative_names, which is what TLS
+# clients actually verify the hostname against (RFC 6125 deprecated
+# CN-based hostname matching; Python's ssl module, like every modern
+# client, checks SANs only).
 resource "aws_acm_certificate" "this" {
-  domain_name               = aws_lb.this.dns_name
+  domain_name               = "authz.internal"
+  subject_alternative_names = [aws_lb.this.dns_name]
   certificate_authority_arn = var.private_ca_arn
 }
 
