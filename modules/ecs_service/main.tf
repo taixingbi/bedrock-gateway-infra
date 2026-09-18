@@ -191,6 +191,13 @@ data "aws_iam_policy_document" "bedrock_invoke" {
     ]
     resources = local.bedrock_model_arns
   }
+
+  # BedrockGuardrailClient (services/gateway/guardrails/bedrock_guardrail.py)
+  statement {
+    sid       = "ApplyGuardrail"
+    actions   = ["bedrock:ApplyGuardrail"]
+    resources = [var.bedrock_guardrail_arn]
+  }
 }
 
 resource "aws_iam_role_policy" "task_bedrock" {

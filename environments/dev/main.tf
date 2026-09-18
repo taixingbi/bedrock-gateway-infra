@@ -63,10 +63,11 @@ module "ecs_service" {
 
   bedrock_model_ids = var.bedrock_model_ids
 
-  jobs_queue_arn   = aws_sqs_queue.jobs.arn
-  jobs_table_arn   = aws_dynamodb_table.jobs.arn
-  usage_table_arn  = aws_dynamodb_table.usage.arn
-  audit_bucket_arn = aws_s3_bucket.audit.arn
+  jobs_queue_arn        = aws_sqs_queue.jobs.arn
+  jobs_table_arn        = aws_dynamodb_table.jobs.arn
+  usage_table_arn       = aws_dynamodb_table.usage.arn
+  audit_bucket_arn      = aws_s3_bucket.audit.arn
+  bedrock_guardrail_arn = aws_bedrock_guardrail.this.guardrail_arn
 
   onboarding_requests_table_arn            = aws_dynamodb_table.onboarding_requests.arn
   onboarding_audit_table_arn               = aws_dynamodb_table.onboarding_audit.arn
@@ -74,20 +75,22 @@ module "ecs_service" {
   provisioned_principal_mappings_table_arn = aws_dynamodb_table.provisioned_principal_mappings.arn
 
   container_env = {
-    AWS_REGION            = var.aws_region
-    BEDROCK_MODEL_ID      = var.bedrock_model_ids[0]
-    GATEWAY_HOST          = "0.0.0.0"
-    GATEWAY_PORT          = "8080"
-    SERVICE_NAME          = local.name_prefix
-    ENVIRONMENT           = "dev"
-    LOG_LEVEL             = "INFO"
-    ROUTE_SET_CONFIG_PATH = "policies/route_sets.yaml"
-    TENANT_POLICY_PATH    = "policies/tenants.yaml"
-    IAM_TENANTS_PATH      = "policies/iam_tenants.yaml"
-    JOBS_QUEUE_URL        = aws_sqs_queue.jobs.url
-    JOBS_TABLE_NAME       = aws_dynamodb_table.jobs.name
-    USAGE_TABLE_NAME      = aws_dynamodb_table.usage.name
-    AUDIT_BUCKET_NAME     = aws_s3_bucket.audit.id
+    AWS_REGION                = var.aws_region
+    BEDROCK_MODEL_ID          = var.bedrock_model_ids[0]
+    GATEWAY_HOST              = "0.0.0.0"
+    GATEWAY_PORT              = "8080"
+    SERVICE_NAME              = local.name_prefix
+    ENVIRONMENT               = "dev"
+    LOG_LEVEL                 = "INFO"
+    ROUTE_SET_CONFIG_PATH     = "policies/route_sets.yaml"
+    TENANT_POLICY_PATH        = "policies/tenants.yaml"
+    IAM_TENANTS_PATH          = "policies/iam_tenants.yaml"
+    JOBS_QUEUE_URL            = aws_sqs_queue.jobs.url
+    JOBS_TABLE_NAME           = aws_dynamodb_table.jobs.name
+    USAGE_TABLE_NAME          = aws_dynamodb_table.usage.name
+    AUDIT_BUCKET_NAME         = aws_s3_bucket.audit.id
+    BEDROCK_GUARDRAIL_ID      = aws_bedrock_guardrail.this.guardrail_id
+    BEDROCK_GUARDRAIL_VERSION = "DRAFT"
 
     ONBOARDING_REQUESTS_TABLE_NAME            = aws_dynamodb_table.onboarding_requests.name
     ONBOARDING_AUDIT_TABLE_NAME               = aws_dynamodb_table.onboarding_audit.name
@@ -211,6 +214,49 @@ resource "aws_s3_bucket_lifecycle_configuration" "audit" {
     expiration {
       days = 30
     }
+  }
+}
+
+# --- Bedrock Guardrail (BedrockGuardrailClient, services/gateway/
+# guardrails/bedrock_guardrail.py) -- real ML-based moderation,
+# replacing BasicGuardrailClient's regex checks. Scope deliberately
+# mirrors what BasicGuardrailClient already covered (SSN/card/email PII,
+# prompt-injection) rather than inventing a broader content policy --
+# one shared guardrail for every tenant today, see
+# bedrock_guardrail.py's own scoping note on why per-policy guardrails
+# aren't built yet. DRAFT version used directly (no separate published
+# version) -- fine for dev; a real prod deployment would want a
+# published, immutable numbered version instead.
+resource "aws_bedrock_guardrail" "this" {
+  name                      = "${local.name_prefix}-guardrail"
+  blocked_input_messaging   = "This input was blocked by a content guardrail."
+  blocked_outputs_messaging = "This response was blocked by a content guardrail."
+
+  sensitive_information_policy_config {
+    pii_entities_config {
+      type   = "US_SOCIAL_SECURITY_NUMBER"
+      action = "BLOCK"
+    }
+    pii_entities_config {
+      type   = "CREDIT_DEBIT_CARD_NUMBER"
+      action = "BLOCK"
+    }
+    pii_entities_config {
+      type   = "EMAIL"
+      action = "BLOCK"
+    }
+  }
+
+  content_policy_config {
+    filters_config {
+      type            = "PROMPT_ATTACK"
+      input_strength  = "MEDIUM"
+      output_strength = "NONE" # PROMPT_ATTACK is an input-only concept -- AWS requires output_strength set, NONE is the correct value here, not a weaker choice
+    }
+  }
+
+  tags = {
+    Environment = "dev"
   }
 }
 
