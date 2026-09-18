@@ -286,14 +286,18 @@ data "aws_iam_policy_document" "infra_plan" {
       "dynamodb:GetItem", "dynamodb:Describe*", "dynamodb:ListTagsOfResource",
       "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:ListQueues", "sqs:ListQueueTags",
       "s3:GetObject", "s3:ListBucket",
-      # Refreshing aws_s3_bucket + its sub-resources (public access
-      # block, encryption, lifecycle) reads several other Get* calls
-      # beyond plain GetObject/ListBucket -- learned live, planning
-      # against the audit bucket 403'd on GetBucketPolicy the first
-      # time this policy's refresh actually exercised it.
-      "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetEncryptionConfiguration",
-      "s3:GetLifecycleConfiguration", "s3:GetBucketTagging", "s3:GetBucketVersioning",
-      "s3:GetBucketLocation", "s3:GetBucketAcl",
+      # aws_s3_bucket + its sub-resources (public access block,
+      # encryption, lifecycle, CORS, ...) call many distinct Get*
+      # bucket-config actions on refresh -- learned live over four
+      # separate 403s chasing one action at a time (GetBucketPolicy,
+      # GetBucketAcl, GetBucketCORS, ...), so this is the wildcard
+      # instead of a fifth one-at-a-time fix -- same "Get*" convention
+      # already used below for cognito-idp/cloudfront/acm in this same
+      # statement.
+      "s3:Get*",
+      # Bedrock guardrail refresh (aws_bedrock_guardrail.this) -- same
+      # reasoning, discovered live alongside the S3 gaps above.
+      "bedrock:Get*", "bedrock:List*",
       # Refreshing aws_cognito_user/aws_cognito_user_in_group state
       # calls the Admin* variants (AdminGetUser,
       # AdminListGroupsForUser), a separate action namespace from
