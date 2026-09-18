@@ -293,7 +293,7 @@ data "aws_iam_policy_document" "infra_plan" {
       # time this policy's refresh actually exercised it.
       "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetEncryptionConfiguration",
       "s3:GetLifecycleConfiguration", "s3:GetBucketTagging", "s3:GetBucketVersioning",
-      "s3:GetBucketLocation",
+      "s3:GetBucketLocation", "s3:GetBucketAcl",
       # Refreshing aws_cognito_user/aws_cognito_user_in_group state
       # calls the Admin* variants (AdminGetUser,
       # AdminListGroupsForUser), a separate action namespace from

@@ -199,7 +199,12 @@ resource "aws_s3_bucket_lifecycle_configuration" "audit" {
 # not applied (see this repo's standing "hold prod" practice); a real
 # prod apply would want a published, immutable numbered version.
 resource "aws_bedrock_guardrail" "this" {
-  name                      = "${local.name_prefix}-guardrail"
+  name = "${local.name_prefix}-guardrail"
+  # Explicit, not left unset -- an unset description tripped a real
+  # provider bug live in dev ("Provider returned invalid result object
+  # after apply ... unknown value for ... description"), leaving the
+  # resource tainted after an otherwise-successful create.
+  description               = "Guardrail for BedrockGuardrailClient (services/gateway/guardrails/bedrock_guardrail.py) -- SSN/card/email PII + prompt-attack filtering."
   blocked_input_messaging   = "This input was blocked by a content guardrail."
   blocked_outputs_messaging = "This response was blocked by a content guardrail."
 
