@@ -286,6 +286,14 @@ data "aws_iam_policy_document" "infra_plan" {
       "dynamodb:GetItem", "dynamodb:Describe*", "dynamodb:ListTagsOfResource",
       "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:ListQueues", "sqs:ListQueueTags",
       "s3:GetObject", "s3:ListBucket",
+      # Refreshing aws_s3_bucket + its sub-resources (public access
+      # block, encryption, lifecycle) reads several other Get* calls
+      # beyond plain GetObject/ListBucket -- learned live, planning
+      # against the audit bucket 403'd on GetBucketPolicy the first
+      # time this policy's refresh actually exercised it.
+      "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetEncryptionConfiguration",
+      "s3:GetLifecycleConfiguration", "s3:GetBucketTagging", "s3:GetBucketVersioning",
+      "s3:GetBucketLocation",
       # Refreshing aws_cognito_user/aws_cognito_user_in_group state
       # calls the Admin* variants (AdminGetUser,
       # AdminListGroupsForUser), a separate action namespace from
@@ -426,6 +434,19 @@ data "aws_iam_policy_document" "infra_apply" {
     sid       = "S3AuditBucketBroad"
     actions   = ["s3:*"]
     resources = ["arn:aws:s3:::gateway-*-audit", "arn:aws:s3:::gateway-*-audit/*"]
+  }
+  # BedrockGuardrailClient's aws_bedrock_guardrail -- learned live, the
+  # first apply 403'd on bedrock:TagResource (the resource sets tags).
+  # Guardrail ids don't exist until creation, same "*" reasoning as
+  # SqsBroad/DynamoDbBroad/CognitoBroad above.
+  statement {
+    sid = "BedrockGuardrailBroad"
+    actions = [
+      "bedrock:CreateGuardrail", "bedrock:CreateGuardrailVersion", "bedrock:UpdateGuardrail",
+      "bedrock:DeleteGuardrail", "bedrock:GetGuardrail", "bedrock:ListGuardrails",
+      "bedrock:TagResource", "bedrock:UntagResource", "bedrock:ListTagsForResource",
+    ]
+    resources = ["*"]
   }
 }
 
