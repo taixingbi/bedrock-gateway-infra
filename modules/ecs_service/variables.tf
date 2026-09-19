@@ -141,3 +141,13 @@ variable "provisioned_tenant_policies_table_arn" {
 variable "provisioned_principal_mappings_table_arn" {
   type = string
 }
+
+# Plan section 33: policy versioning/approval/rollback -- same "known
+# after apply on first create" reasoning as the M11 pair above.
+variable "policy_change_requests_table_arn" {
+  type = string
+}
+
+variable "provisioned_tenant_policies_history_table_arn" {
+  type = string
+}

@@ -303,6 +303,32 @@ resource "aws_iam_role_policy" "task_onboarding" {
   policy = data.aws_iam_policy_document.onboarding_access.json
 }
 
+# Plan section 33: policy versioning/approval/rollback. DynamoDbPolicyStore's
+# apply_change() does a conditional PutItem (dynamodb:PutItem covers it --
+# ConditionExpression isn't a separate IAM action); rollback() does a
+# GetItem on the history table by (tenant_id, policy_epoch); list_history()
+# Queries it. PolicyChangeStore's list_for_tenant() Scans, same tradeoff as
+# onboarding_access above.
+data "aws_iam_policy_document" "policy_versioning_access" {
+  statement {
+    sid       = "PolicyChangeRequests"
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Scan"]
+    resources = [var.policy_change_requests_table_arn]
+  }
+
+  statement {
+    sid       = "ProvisionedTenantPoliciesHistory"
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"]
+    resources = [var.provisioned_tenant_policies_history_table_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "task_policy_versioning" {
+  name   = "${var.name_prefix}-policy-versioning-access"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.policy_versioning_access.json
+}
+
 # S3AuditStore (services/gateway/telemetry/debug_capture.py) -- write
 # only, no Get/List/Delete. This is a durable audit trail; the gateway
 # task itself has no business reading its own past writes back, let

@@ -74,6 +74,9 @@ module "ecs_service" {
   provisioned_tenant_policies_table_arn    = aws_dynamodb_table.provisioned_tenant_policies.arn
   provisioned_principal_mappings_table_arn = aws_dynamodb_table.provisioned_principal_mappings.arn
 
+  policy_change_requests_table_arn              = aws_dynamodb_table.policy_change_requests.arn
+  provisioned_tenant_policies_history_table_arn = aws_dynamodb_table.provisioned_tenant_policies_history.arn
+
   container_env = {
     AWS_REGION                = var.aws_region
     BEDROCK_MODEL_ID          = var.bedrock_model_ids[0]
@@ -96,6 +99,9 @@ module "ecs_service" {
     ONBOARDING_AUDIT_TABLE_NAME               = aws_dynamodb_table.onboarding_audit.name
     PROVISIONED_TENANT_POLICIES_TABLE_NAME    = aws_dynamodb_table.provisioned_tenant_policies.name
     PROVISIONED_PRINCIPAL_MAPPINGS_TABLE_NAME = aws_dynamodb_table.provisioned_principal_mappings.name
+
+    POLICY_CHANGE_REQUESTS_TABLE_NAME              = aws_dynamodb_table.policy_change_requests.name
+    PROVISIONED_TENANT_POLICIES_HISTORY_TABLE_NAME = aws_dynamodb_table.provisioned_tenant_policies_history.name
 
     # M12 (plan.md Section 5): delegates AWS_IAM principal mapping to
     # authz-service instead of resolving it in-process. HTTPS via a
@@ -358,6 +364,49 @@ resource "aws_dynamodb_table" "provisioned_principal_mappings" {
   attribute {
     name = "principal_arn"
     type = "S"
+  }
+
+  tags = {
+    Environment = "dev"
+  }
+}
+
+# --- Plan section 33: policy versioning/approval/rollback -----------------
+
+# One row per proposed edit to an already-provisioned tenant's policy --
+# see services/gateway/policy/change_requests.py's PolicyChangeRequest.
+resource "aws_dynamodb_table" "policy_change_requests" {
+  name         = "${local.name_prefix}-policy-change-requests"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "change_id"
+
+  attribute {
+    name = "change_id"
+    type = "S"
+  }
+
+  tags = {
+    Environment = "dev"
+  }
+}
+
+# Every past version of a provisioned tenant's policy, keyed by the
+# policy_epoch it was current at -- what apply_change()/set_state()
+# archive before overwriting, and what rollback() reads back from (see
+# services/gateway/policy/store.py's DynamoDbPolicyStore._archive()).
+resource "aws_dynamodb_table" "provisioned_tenant_policies_history" {
+  name         = "${local.name_prefix}-provisioned-tenant-policies-history"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "tenant_id"
+  range_key    = "policy_epoch"
+
+  attribute {
+    name = "tenant_id"
+    type = "S"
+  }
+  attribute {
+    name = "policy_epoch"
+    type = "N"
   }
 
   tags = {
