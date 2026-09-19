@@ -110,6 +110,12 @@ variable "audit_bucket_arn" {
   type = string
 }
 
+# Plan section 34.4: separate bucket from audit_bucket_arn above --
+# metadata-only, always-on, Object Lock enabled.
+variable "request_audit_bucket_arn" {
+  type = string
+}
+
 variable "bedrock_guardrail_arn" {
   type = string
 }

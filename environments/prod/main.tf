@@ -65,11 +65,12 @@ module "ecs_service" {
 
   bedrock_model_ids = var.bedrock_model_ids
 
-  jobs_queue_arn        = aws_sqs_queue.jobs.arn
-  jobs_table_arn        = aws_dynamodb_table.jobs.arn
-  usage_table_arn       = aws_dynamodb_table.usage.arn
-  audit_bucket_arn      = aws_s3_bucket.audit.arn
-  bedrock_guardrail_arn = aws_bedrock_guardrail.this.guardrail_arn
+  jobs_queue_arn           = aws_sqs_queue.jobs.arn
+  jobs_table_arn           = aws_dynamodb_table.jobs.arn
+  usage_table_arn          = aws_dynamodb_table.usage.arn
+  audit_bucket_arn         = aws_s3_bucket.audit.arn
+  request_audit_bucket_arn = aws_s3_bucket.request_audit.arn
+  bedrock_guardrail_arn    = aws_bedrock_guardrail.this.guardrail_arn
 
   onboarding_requests_table_arn            = aws_dynamodb_table.onboarding_requests.arn
   onboarding_audit_table_arn               = aws_dynamodb_table.onboarding_audit.arn
@@ -94,6 +95,7 @@ module "ecs_service" {
     JOBS_TABLE_NAME           = aws_dynamodb_table.jobs.name
     USAGE_TABLE_NAME          = aws_dynamodb_table.usage.name
     AUDIT_BUCKET_NAME         = aws_s3_bucket.audit.id
+    REQUEST_AUDIT_BUCKET_NAME = aws_s3_bucket.request_audit.id
     BEDROCK_GUARDRAIL_ID      = aws_bedrock_guardrail.this.guardrail_id
     BEDROCK_GUARDRAIL_VERSION = "DRAFT"
 
@@ -192,6 +194,69 @@ resource "aws_s3_bucket_lifecycle_configuration" "audit" {
       days = 30
     }
   }
+}
+
+# --- Request audit store (S3RequestAuditStore, services/gateway/
+# telemetry/request_audit.py, plan section 34.4) -- SEPARATE from the
+# audit bucket above: metadata-only, always on, Object Lock enabled.
+#
+# Unlike dev's copy of this resource (GOVERNANCE mode, 90 days -- see
+# that comment for why), prod deliberately uses COMPLIANCE mode with a
+# genuine regulatory retention (7 years / 2555 days, typical for
+# insurance) -- the real decision this whole environment exists to
+# represent but never applies (see this file's/plan.md's standing
+# "prod is config-mirrored, never terraform-applied" note). COMPLIANCE
+# mode means literally nobody, including account root, can delete an
+# object before retention expires -- appropriate for prod's actual
+# regulatory audit trail, deliberately NOT the default for dev where
+# it would just be a footgun.
+resource "aws_s3_bucket" "request_audit" {
+  bucket              = "${local.name_prefix}-audit-immutable"
+  object_lock_enabled = true
+
+  tags = {
+    Environment = "prod"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "request_audit" {
+  bucket = aws_s3_bucket.request_audit.id
+
+  versioning_configuration {
+    status = "Enabled" # required for Object Lock
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "request_audit" {
+  bucket = aws_s3_bucket.request_audit.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "request_audit" {
+  bucket = aws_s3_bucket.request_audit.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_object_lock_configuration" "request_audit" {
+  bucket = aws_s3_bucket.request_audit.id
+
+  rule {
+    default_retention {
+      mode = "COMPLIANCE"
+      days = 2555
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.request_audit]
 }
 
 # --- Bedrock Guardrail (BedrockGuardrailClient, services/gateway/

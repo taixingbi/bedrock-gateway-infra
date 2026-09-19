@@ -347,6 +347,25 @@ resource "aws_iam_role_policy" "task_audit" {
   policy = data.aws_iam_policy_document.audit_access.json
 }
 
+# S3RequestAuditStore (services/gateway/telemetry/request_audit.py) --
+# same write-only reasoning as audit_access above. Object Lock is
+# enforced at the bucket, not here -- IAM PutObject on a locked bucket
+# still works, the lock only prevents deletion before retention
+# expires.
+data "aws_iam_policy_document" "request_audit_access" {
+  statement {
+    sid       = "RequestAuditWrite"
+    actions   = ["s3:PutObject"]
+    resources = ["${var.request_audit_bucket_arn}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_request_audit" {
+  name   = "${var.name_prefix}-request-audit-access"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.request_audit_access.json
+}
+
 # --- Tracing: ADOT sidecar -> X-Ray -------------------------------------
 #
 # Own config passed inline via AOT_CONFIG_CONTENT (the ADOT image's own
