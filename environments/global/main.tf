@@ -434,10 +434,16 @@ data "aws_iam_policy_document" "infra_apply" {
   # name IS predictable (this app's own naming convention), so scoped
   # by name rather than "*" like the tfstate grant above would need to
   # be if extended here too.
+  #
+  # Widened from "gateway-*-audit" to "gateway-*-audit*" for
+  # S3RequestAuditStore's bucket (gateway-{dev,prod}-audit-immutable,
+  # plan section 34.4) -- learned live the same way: the first apply
+  # attempting to create it 403'd on s3:CreateBucket, this resource
+  # pattern didn't match the "-immutable" suffix.
   statement {
     sid       = "S3AuditBucketBroad"
     actions   = ["s3:*"]
-    resources = ["arn:aws:s3:::gateway-*-audit", "arn:aws:s3:::gateway-*-audit/*"]
+    resources = ["arn:aws:s3:::gateway-*-audit*", "arn:aws:s3:::gateway-*-audit*/*"]
   }
   # BedrockGuardrailClient's aws_bedrock_guardrail -- learned live, the
   # first apply 403'd on bedrock:TagResource (the resource sets tags).
